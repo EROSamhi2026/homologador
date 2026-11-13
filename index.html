@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Homologador CALLMED V 0.16</title>
+<title>Homologador CALLMED V 0.17</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -296,7 +296,7 @@ html.solo-lectura .btn-baja, html.solo-lectura #btn-nueva-alta, html.solo-lectur
         <button class="nav-item" data-go="consultas" data-nav="consultas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><span class="lbl">Consultas rápidas</span></button>
       </nav>
       <div class="top-actions">
-        <span class="ver">V 0.16</span>
+        <span class="ver">V 0.17</span>
         <button class="icon-btn theme-toggle" type="button"></button>
       </div>
     </div>
@@ -978,11 +978,14 @@ window.eliminarFila = eliminarFila;
 
 
 // ============ homologar: formato + cliente (core y pantalla) ============
+// Nombre de la función de IA en Supabase (Edge Functions). Si algún día cambia, se cambia solo aquí.
+const GROQ_PROXY_NOMBRE = 'rapid-processor';
+
 const CONFIG = {
   SUPABASE_URL, SUPABASE_KEY,
   EMBEDDING_URL: EMBEDDING_FUNCTION_URL,
   GROQ_API_KEY, GROQ_MODEL,
-  GROQ_PROXY_URL: `${SUPABASE_URL}/functions/v1/groq-proxy`,     // función en Supabase que guarda la llave de Groq
+  GROQ_PROXY_URL: `${SUPABASE_URL}/functions/v1/${GROQ_PROXY_NOMBRE}`,     // función en Supabase que guarda la llave de Groq
 };
 
 // Archivo OPCIONAL config.local.js (junto a este HTML): ahí se guarda la llave de Groq una sola vez.
@@ -2190,6 +2193,7 @@ function claveGroq() {
   return (LOCAL.GROQ_API_KEY || CONFIG.GROQ_API_KEY || '').trim();        // 1.º la pegada en pantalla, 2.º config.local.js, 3.º la incrustada
 }
 // Dirección de la función groq-proxy. Se puede apagar con GROQ_PROXY_URL: '' en config.local.js.
+function nombreProxy() { return (urlProxyIA().split('/').filter(Boolean).pop()) || GROQ_PROXY_NOMBRE; }   // el nombre real que se usa, para los mensajes
 function urlProxyIA() { const u = LOCAL.GROQ_PROXY_URL ?? CONFIG.GROQ_PROXY_URL; return (u || '').trim(); }
 // 'directo'  = con la llave de esta persona (pegada en pantalla o en config.local.js)
 // 'servidor' = la llave vive en Supabase y nadie la teclea
@@ -2230,14 +2234,14 @@ function explicarErrorIA(e) {
   const det = e && e.message ? e.message : String(e);
   switch (tipo) {
     case 'sinllave': return 'Todavía no hay una llave de IA guardada en este navegador. Pulsa "Configurar llave", pégala y pulsa Guardar. Si ya la guardaste y vuelve a salir esto, estás abriendo el archivo desde otra dirección (por ejemplo con doble clic en lugar de Live Server): ábrelo siempre de la misma forma.';
-    case 'proxy': return `El servicio de IA del servidor no respondió bien (${det}). Quien administra Supabase debe revisar tres cosas: que la función groq-proxy esté desplegada, que exista el secreto GROQ_API_KEY y que esta dirección esté en ALLOWED_ORIGINS. Mientras tanto puedes pegar tu propia llave en "Configurar llave" y la IA funcionará con ella.`;
+    case 'proxy': return `El servicio de IA del servidor no respondió bien (${det}). Quien administra Supabase debe revisar tres cosas: que la función ${nombreProxy()} esté desplegada, que exista el secreto GROQ_API_KEY y que esta dirección esté en ALLOWED_ORIGINS. Mientras tanto puedes pegar tu propia llave en "Configurar llave" y la IA funcionará con ella.`;
     case 'llave': return `Groq no aceptó la llave (${det}). Revisa que esté bien copiada y que no la hayas borrado en console.groq.com → API Keys; si hace falta, crea una nueva y pégala en "Configurar llave".`;
     case 'modelo': return `El modelo "${modeloGroq()}" no está disponible en Groq (${det}). Pulsa "Probar conexión con la IA" para ver qué modelos tiene tu cuenta.`;
     case 'limite': return `Se alcanzó el límite de solicitudes de Groq (${det}). Espera uno o dos minutos y vuelve a intentar, o corre sin IA.`;
     case 'red': {
       if (modoIA() === 'servidor') {
         const donde = location.origin && location.origin !== 'null' ? location.origin : '(la dirección de esta página)';
-        return `No se pudo contactar la función de IA del servidor (${det}). Casi siempre es una de tres cosas: (1) la función groq-proxy no está desplegada en Supabase: abre ${urlProxyIA()} en una pestaña y, si dice NOT_FOUND, falta desplegarla; (2) esta dirección no está autorizada: agrega ${donde} a ALLOWED_ORIGINS en Supabase → Edge Functions → Secrets; (3) la función tiene "Verify JWT" encendido. Si no es ninguna de esas, revisa tu internet o una extensión del navegador que bloquee la conexión.`;
+        return `No se pudo contactar la función de IA del servidor (${det}). Casi siempre es una de tres cosas: (1) la función ${nombreProxy()} no está desplegada en Supabase: abre ${urlProxyIA()} en una pestaña y, si dice NOT_FOUND, falta desplegarla; (2) esta dirección no está autorizada: agrega ${donde} a ALLOWED_ORIGINS en Supabase → Edge Functions → Secrets; (3) la función tiene "Verify JWT" encendido. Si no es ninguna de esas, revisa tu internet o una extensión del navegador que bloquee la conexión.`;
       }
       return `No se pudo conectar con Groq (${det}). Revisa tu internet y si un antivirus o una extensión del navegador está bloqueando la conexión.`;
     }
