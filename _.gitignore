@@ -1,0 +1,8 @@
+# Nunca se sube: tu configuración personal con la llave de Groq
+config.local.js
+
+# Ni respaldos, datos o documentos de trabajo
+*.xlsx
+*.csv
+*.sql
+*.zip

@@ -1,0 +1,3183 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Homologador CALLMED V 0.15</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+/* ===== Paleta (la misma de "Tabuladores Médicos") ===== */
+:root{
+  --blanco:#ffffff; --pino:#2e3e3c; --teal:#008890; --aqua:#97d5d7; --petroleo:#48868e; --bosque:#334035;
+  --teal-oscuro:#007a82; --ambar:#f2c14e; --coral:#f08a7e;
+
+  --text:var(--blanco);
+  --text-soft:rgba(255,255,255,0.80);
+  --ink-soft:var(--text-soft);              /* alias para estilos en línea heredados */
+  --divider:rgba(151,213,215,0.35);
+  --a-nav:.55; --a-list:.48; --a-panel:.32;
+  --app-bg:
+    radial-gradient(55% 45% at 8% 8%, rgba(151,213,215,0.55) 0%, transparent 70%),
+    radial-gradient(45% 45% at 55% 30%, rgba(0,136,144,0.9) 0%, transparent 70%),
+    radial-gradient(55% 55% at 92% 85%, rgba(51,64,53,0.95) 0%, transparent 70%),
+    linear-gradient(135deg, var(--teal) 0%, var(--petroleo) 45%, var(--pino) 100%);
+  color-scheme:dark;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --a-nav:.7; --a-list:.62; --a-panel:.45;
+    --app-bg:
+      radial-gradient(50% 40% at 8% 8%, rgba(151,213,215,0.22) 0%, transparent 70%),
+      radial-gradient(45% 45% at 55% 30%, rgba(0,136,144,0.55) 0%, transparent 70%),
+      radial-gradient(55% 55% at 92% 85%, rgba(51,64,53,0.95) 0%, transparent 70%),
+      linear-gradient(135deg, var(--pino) 0%, var(--bosque) 55%, var(--pino) 100%);
+  }
+}
+:root[data-theme="dark"]{
+  --a-nav:.7; --a-list:.62; --a-panel:.45;
+  --app-bg:
+    radial-gradient(50% 40% at 8% 8%, rgba(151,213,215,0.22) 0%, transparent 70%),
+    radial-gradient(45% 45% at 55% 30%, rgba(0,136,144,0.55) 0%, transparent 70%),
+    radial-gradient(55% 55% at 92% 85%, rgba(51,64,53,0.95) 0%, transparent 70%),
+    linear-gradient(135deg, var(--pino) 0%, var(--bosque) 55%, var(--pino) 100%);
+}
+
+*,*::before,*::after{box-sizing:inherit}
+html,body{min-height:100%}
+html{scroll-padding-top:env(safe-area-inset-top,0px); background-color:var(--pino); background-image:var(--app-bg); background-attachment:fixed; background-repeat:no-repeat}
+body{margin:0; color:var(--text);
+  font-family:"Segoe UI","Open Sans","Helvetica Neue",Arial,sans-serif; font-size:15px; line-height:1.5; min-height:100vh}
+button{font:inherit; color:inherit}
+.view{display:none}
+.view.active{display:block}
+
+/* Panel translúcido */
+.topnav,.pathbar,.step,.tile,.note,.toolbar,.counters,.block{backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px)}
+
+/* ===== Formularios: superficies blancas con texto pino ===== */
+input,select{width:100%; height:40px; padding:0 12px; border:0; border-left:4px solid var(--petroleo); background:var(--blanco);
+  color:var(--pino); font:inherit; font-size:14px; border-radius:0; color-scheme:light}
+input::placeholder{color:var(--petroleo)}
+select option{color:var(--pino)}
+input:focus,select:focus{outline:2px solid var(--aqua); outline-offset:1px}
+input[type="checkbox"]{width:16px; height:16px; padding:0; border:0; accent-color:var(--aqua)}
+label{font-size:13px; font-weight:600; color:var(--text); display:block; margin-bottom:6px}
+:focus-visible{outline:2px solid var(--blanco); outline-offset:2px}
+
+/* ===== Menú superior ===== */
+#app{display:flex; flex-direction:column; min-height:100vh}
+.topnav{position:sticky; top:0; z-index:8; background:rgba(46,62,60,var(--a-nav)); padding-top:env(safe-area-inset-top,0px)}
+.topnav-inner{display:flex; align-items:center; height:56px}
+.rail-top{display:flex; align-items:center; gap:12px; white-space:nowrap; font-weight:600; padding:0 22px 0 11px; height:100%; flex:none; background:none; border:none; cursor:pointer}
+.sq{width:34px; height:34px; background:var(--teal); display:grid; place-items:center; flex:none}
+.sq svg{width:18px; height:18px}
+.navlist{display:flex; align-items:stretch; height:100%; overflow-x:auto; overflow-y:visible; scrollbar-width:none}
+.navlist::-webkit-scrollbar{display:none}
+.nav-item{display:flex; align-items:center; gap:9px; padding:0 18px; height:100%; border:none; background:none; cursor:pointer; white-space:nowrap; position:relative; font-size:14px; transition:background .15s}
+.nav-item svg{width:19px; height:19px; flex:none}
+.nav-item:hover:not(:disabled){background:rgba(255,255,255,.10)}
+.nav-item.active{background:var(--teal); font-weight:600}
+.top-actions{margin-left:auto; display:flex; align-items:center; gap:10px; padding-right:12px; flex:none}
+.ver{font-size:12px; font-weight:600; color:var(--pino); background:var(--aqua); padding:2px 10px}
+.icon-btn{display:flex; align-items:center; gap:8px; height:38px; padding:0 12px; border:1px solid var(--divider); background:none; cursor:pointer; font-weight:600; font-size:13px}
+.icon-btn svg{width:17px; height:17px}
+.icon-btn:hover{background:rgba(255,255,255,.10)}
+.content{flex:1; display:flex; flex-direction:column; min-width:0}
+
+/* ===== Barra de ubicación ===== */
+.pathbar{position:sticky; top:calc(56px + env(safe-area-inset-top,0px)); z-index:4; background:rgba(46,62,60,var(--a-list)); border-top:1px solid var(--divider); padding:10px 32px; display:flex; align-items:center; gap:10px}
+.pathbar .back{width:32px; height:32px; border:1px solid var(--divider); background:none; cursor:pointer; display:grid; place-items:center; flex:none}
+.pathbar .back:hover:not(:disabled){background:rgba(255,255,255,.10)}
+.pathbar .back:disabled{opacity:.35; cursor:default}
+.pathbar .back svg{width:16px; height:16px}
+.path{display:flex; align-items:center; flex-wrap:wrap; gap:4px; font-size:13px}
+.path button{background:none; border:none; color:var(--aqua); cursor:pointer; padding:4px 6px}
+.path button:hover{background:rgba(255,255,255,.10); color:var(--blanco)}
+.path .sep{color:var(--aqua)}
+.path .here{font-weight:600; padding:4px 10px; background:var(--teal-oscuro)}
+
+main{padding:36px 32px 56px; max-width:1240px; width:100%; margin:0 auto}
+
+/* ===== Encabezados de página ===== */
+.eyebrow{display:inline-block; width:40px; height:4px; background:var(--aqua); margin-bottom:14px}
+h3.title{font-size:34px; font-weight:300; line-height:1.1; margin:0}
+.lead{color:var(--text-soft); margin:8px 0 30px; max-width:60ch}
+header.top{display:flex; justify-content:space-between; align-items:flex-end; gap:20px; flex-wrap:wrap; margin-bottom:26px}
+header.top h1{font-size:34px; font-weight:300; line-height:1.1; margin:0}
+header.top h1::before{content:""; display:block; width:40px; height:4px; background:var(--aqua); margin-bottom:14px}
+header.top p{color:var(--text-soft); margin:8px 0 0; max-width:62ch}
+.top-right{display:flex; flex-direction:column; align-items:flex-end; gap:6px}
+.counters{display:flex; gap:0; background:rgba(46,62,60,var(--a-panel))}
+.counter{padding:10px 20px; border-left:4px solid var(--aqua); display:flex; flex-direction:column}
+.counter + .counter{border-left-color:var(--petroleo)}
+.counter .n{font-size:28px; font-weight:300; line-height:1.1}
+.counter .label{font-size:12px; color:var(--aqua)}
+.fecha{font-size:12px; color:var(--aqua)}
+
+/* ===== Menú inicial: bloques y fichas ===== */
+.blocks{display:grid; grid-template-columns:1.4fr 1fr; gap:10px}
+.block{border:none; text-align:left; cursor:pointer; padding:24px; color:var(--blanco); display:flex; flex-direction:column; gap:8px; min-height:170px; position:relative; overflow:hidden; transition:transform .15s, box-shadow .15s}
+.block:hover:not(:disabled){transform:translateY(-2px); box-shadow:inset 0 0 0 2px rgba(255,255,255,.7)}
+.block h4{margin:0; font-size:22px; font-weight:600}
+.block p{margin:0; max-width:38ch; color:rgba(255,255,255,.88)}
+.block .arrow{margin-top:auto; font-weight:600}
+.block svg.big{position:absolute; right:-14px; bottom:-14px; width:130px; height:130px; opacity:.22}
+.b-homologar{background:var(--teal); grid-row:span 2; min-height:350px}
+.b-homologar h4{font-size:30px; font-weight:300}
+.b-catalogo{background:var(--bosque)}
+.b-consultas{background:var(--aqua); color:var(--pino)}
+.b-consultas p{color:var(--pino)}
+.strip{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:10px}
+.tile{background:rgba(46,62,60,var(--a-panel)); padding:0 18px 18px}
+.tile h5{margin:0 -18px 14px; height:42px; display:flex; align-items:center; padding:0 16px; background:var(--teal); font-size:14px; font-weight:600}
+.strip .tile:nth-child(2) h5{background:var(--petroleo)}
+.qs{display:flex; gap:8px}
+.qs button{border:none; background:var(--teal-oscuro); color:var(--blanco); padding:0 18px; cursor:pointer; font-weight:600}
+.qs button:hover{background:var(--petroleo)}
+.chips{display:flex; flex-wrap:wrap; gap:6px}
+.chip{border:1px solid var(--divider); background:rgba(255,255,255,.06); padding:5px 12px; cursor:pointer; font-size:13px; font-weight:600}
+.chip:hover{background:var(--teal-oscuro); border-color:var(--teal-oscuro)}
+.empty{font-size:14px; color:var(--text-soft); margin:0}
+
+/* ===== Tarjetas de trabajo (cada paso) ===== */
+.step{position:relative; background:rgba(46,62,60,var(--a-panel)); padding:0 20px 20px; margin-bottom:12px}
+.step:focus-within,.step:has(.autocomplete-list.activa){z-index:20}   /* la lista desplegable no queda tapada por la nota de abajo */
+.step h2{margin:0 -20px 16px; height:42px; display:flex; align-items:center; gap:10px; padding:0 16px; background:var(--teal); font-size:14px; font-weight:600; color:#fff}
+.step h2 .num{min-width:22px; height:22px; padding:0 4px; display:grid; place-items:center; background:rgba(255,255,255,.22); font-size:12px}
+.step.c2 h2{background:var(--petroleo)}
+.step.c3 h2{background:var(--bosque)}
+.step p{color:var(--text-soft)}
+
+/* ===== Botones ===== */
+button.primary,button.ghost{display:inline-flex; align-items:center; justify-content:center; gap:8px; height:40px; padding:0 20px; font-weight:600; cursor:pointer; font-size:14px}
+button.primary{border:none; background:var(--teal-oscuro); color:var(--blanco)}
+button.primary:hover:not(:disabled){background:var(--petroleo)}
+button.ghost{border:1px solid var(--divider); background:none; color:var(--text)}
+button.ghost:hover:not(:disabled){background:rgba(255,255,255,.10)}
+button.small{height:36px; padding:0 14px; font-size:13px}
+button:disabled{opacity:.45; cursor:not-allowed}
+.btn-baja{background:none; border:1px solid rgba(240,138,126,.7); color:#ffc3bb; padding:5px 10px; font-size:12px; font-weight:600; cursor:pointer}
+.btn-baja:hover{background:rgba(240,138,126,.2)}
+
+/* ===== Catálogo: barra de búsqueda, alta, tabla ===== */
+.toolbar{display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; background:rgba(46,62,60,var(--a-panel)); padding:14px 16px; margin-bottom:12px; border-top:4px solid var(--petroleo)}
+.searchbar{display:flex; gap:10px; flex:1; flex-wrap:wrap; align-items:center}
+.searchbar input{flex:1 1 240px; width:auto}
+.searchbar select{width:auto; min-width:190px}
+.alta-grid{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px}
+.alta-actions{display:flex; justify-content:flex-end; gap:10px; margin-top:16px}
+.form-msg{margin-top:10px; font-size:13px; color:var(--text-soft); min-height:18px}
+.form-msg.ok{color:var(--aqua)} .form-msg.error{color:#ffc3bb}
+.paginacion{display:flex; justify-content:center; align-items:center; gap:14px; margin:18px 0}
+.mono{font-family:ui-monospace,"Cascadia Mono",Consolas,monospace; font-size:12.5px; color:var(--text-soft)}
+.code,.codigo{font-family:ui-monospace,"Cascadia Mono",Consolas,monospace; font-size:12.5px; color:var(--aqua)}
+.meta{font-size:12px; color:var(--text-soft)}
+.tabla-msg{text-align:center; color:var(--text-soft); padding:28px !important}
+
+table{width:100%; border-collapse:collapse; background:rgba(46,62,60,var(--a-panel)); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px)}
+thead th{background:var(--petroleo); color:#fff; font-size:13px; font-weight:600; text-align:left; padding:11px 14px; white-space:nowrap}
+tbody td{padding:11px 14px; border-bottom:1px solid var(--divider); vertical-align:top; font-size:14px}
+tbody tr:hover td{background:rgba(255,255,255,.06)}
+.tabla-wrap{overflow-x:auto}
+
+.note{background:rgba(46,62,60,var(--a-panel)); border-left:4px solid var(--aqua); padding:10px 14px; margin:18px 0 12px; font-size:14px; color:var(--text-soft)}
+
+/* ===== Estatus (mismos tres colores del archivo, adaptados al tema) ===== */
+.badge{display:inline-flex; align-items:center; padding:3px 10px; font-size:12px; font-weight:600; white-space:nowrap; color:var(--pino)}
+.badge.auto{background:var(--aqua)}
+.badge.revisar{background:var(--ambar)}
+.badge.sin{background:var(--coral)}
+.badge.error{background:rgba(255,255,255,.35)}
+
+/* ===== Homologar ===== */
+#view-homologar select,#view-consultas select{width:auto; min-width:300px}
+.cliente-info{font-size:13px; color:var(--aqua); margin-top:10px}
+.cliente-resultado{font-size:13px; font-weight:600; color:var(--aqua); margin:0 0 12px}
+.zona{position:relative; border:2px dashed var(--divider); padding:28px 16px; text-align:center; color:var(--text-soft); background:rgba(255,255,255,.06); cursor:pointer}
+.zona b{color:var(--text)}
+.zona.arrastrando{background:rgba(151,213,215,.2); border-color:var(--aqua)}
+.zona input{display:none}
+#h-archivo-info{margin-top:10px; font-size:13px; color:var(--aqua)}
+.acciones{display:flex; gap:12px; align-items:center; flex-wrap:wrap}
+label.chk{display:flex; align-items:center; gap:8px; font-weight:400; margin:0; color:var(--text-soft)}
+.progreso{display:none; margin-top:16px}
+.progreso.activo{display:block}
+.barra-fondo{height:8px; background:rgba(255,255,255,.2); overflow:hidden}
+#h-barra{height:100%; width:0; background:var(--aqua); transition:width .2s}
+#h-progreso-texto{font-size:12.5px; color:var(--text-soft); margin-top:8px}
+.aviso{background:rgba(46,62,60,var(--a-panel)); border-left:4px solid var(--aqua); padding:10px 14px; margin-bottom:12px; font-size:14px; color:var(--text)}
+.aviso.warn{border-left-color:var(--ambar)}
+.aviso.error{border-left-color:var(--coral)}
+.contadores{display:flex; gap:30px; flex-wrap:wrap; margin-bottom:8px}
+.cnt .v{font-size:32px; font-weight:300; line-height:1.1; display:block}
+.cnt .l{font-size:12px; color:var(--aqua)}
+.cnt.auto .v{color:var(--aqua)} .cnt.revisar .v{color:var(--ambar)} .cnt.sin .v{color:var(--coral)} .cnt.error .v{color:var(--text-soft)}
+.leyenda{font-size:12.5px; color:var(--text-soft); margin:6px 0 0}
+.leyenda i{display:inline-block; width:12px; height:12px; vertical-align:-1px; margin:0 6px 0 14px; border:1px solid rgba(255,255,255,.45)}
+.barra-tabs{display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin:14px 0 12px}
+.tabs{display:flex; gap:6px; flex-wrap:wrap}
+.tabs button{border:1px solid var(--divider); background:rgba(255,255,255,.06); padding:6px 14px; cursor:pointer; font-size:13px; font-weight:600}
+.tabs button:hover{background:rgba(255,255,255,.12)}
+.tabs button.activo{background:var(--teal); border-color:var(--teal)}
+.integridad{font-size:13px; margin:0 0 12px}
+.integridad.bien{color:var(--aqua)} .integridad.mal{color:#ffc3bb}
+td.num{font-family:ui-monospace,"Cascadia Mono",Consolas,monospace; font-size:12px; color:var(--text-soft)}
+td.vacio{text-align:center; color:var(--text-soft); padding:28px !important}
+.btn-confirmar{background:none; border:1px solid var(--aqua); color:var(--aqua); padding:5px 10px; font-size:12px; font-weight:600; cursor:pointer}
+.btn-confirmar:hover{background:rgba(151,213,215,.2)}
+
+/* ===== Consultas rápidas ===== */
+.autocomplete-wrap{position:relative; max-width:640px}
+.autocomplete-list{display:none; position:absolute; top:100%; left:0; right:0; z-index:6; max-height:340px; overflow:auto; background:var(--blanco); color:var(--pino); border-left:4px solid var(--petroleo); box-shadow:0 10px 28px rgba(0,0,0,.3)}
+.autocomplete-list.activa{display:block}
+.autocomplete-item{padding:10px 14px; cursor:pointer; border-bottom:1px solid #e1ecec}
+.autocomplete-item:hover{background:#e6f3f4}
+.autocomplete-item .nombre{font-size:14px}
+.autocomplete-item .meta{color:var(--petroleo); margin-top:2px}
+.autocomplete-item .code{color:var(--teal-oscuro)}
+.autocomplete-vacio{padding:14px; color:var(--petroleo); font-size:13px; text-align:center}
+.q-id-fila{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:11px 14px; background:rgba(255,255,255,.08); border-left:4px solid var(--teal); margin-bottom:8px}
+
+/* ===== Adaptable a pantallas chicas ===== */
+@media (max-width:900px){
+  .topnav-inner{height:52px}
+  .rail-top{padding:0 10px 0 9px}
+  .rail-top .lbl,.nav-item .lbl,.icon-btn .lbl,.ver{display:none}
+  .nav-item{padding:0 14px}
+  .icon-btn{padding:0 10px}
+  .pathbar{top:calc(52px + env(safe-area-inset-top,0px)); padding:10px 18px}
+  main{padding:26px 18px 48px}
+  .blocks,.strip,.alta-grid{grid-template-columns:1fr}
+  .b-homologar{grid-row:auto; min-height:200px}
+  header.top{align-items:flex-start}
+  .top-right{align-items:flex-start}
+}
+.ia-panel{margin-top:16px; padding-top:14px; border-top:1px solid var(--divider)}
+.ia-fila{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+.ia-estado{font-size:12px; font-weight:600; padding:3px 10px; background:rgba(255,255,255,.18)}
+.ia-estado.ok{background:var(--aqua); color:var(--pino)}
+.ia-estado.mal{background:var(--coral); color:var(--pino)}
+#h-ia-llave-form{display:none; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap}
+#h-ia-llave-form input{width:360px; max-width:100%}
+.ia-detalle{font-size:12.5px; color:var(--text-soft); margin-top:8px; max-width:95ch; word-break:break-word}
+#h-ia-modelo-fila{display:none; gap:10px; align-items:center; margin-top:10px; flex-wrap:wrap}
+#h-ia-modelo-fila label{margin:0}
+#h-ia-modelo-fila select{width:auto; min-width:300px}
+label.umbral input{width:78px; height:34px; display:inline-block; margin:0 6px; text-align:center}
+.distribucion{font-size:12.5px; color:var(--text-soft); margin:2px 0 8px}
+td.pct{white-space:nowrap; font-weight:600; font-size:13px}
+td.pct.pct-ok{color:var(--aqua)}
+td.pct.pct-bajo{color:var(--ambar)}
+.dic-panel{margin-top:14px; padding-top:12px; border-top:1px solid var(--divider)}
+.dic-panel summary{cursor:pointer; font-weight:600}
+.dic-panel textarea{width:100%; min-height:120px; font-family:ui-monospace,Consolas,monospace; font-size:12px; margin:6px 0 10px}
+.dic-ayuda{font-size:12.5px; color:var(--text-soft); margin:8px 0}
+.etapas{font-size:11px; opacity:.75}
+html.solo-lectura .btn-baja, html.solo-lectura #btn-nueva-alta, html.solo-lectura #card-embeddings, html.solo-lectura #alta-form{display:none !important}
+.solo-lectura-aviso{margin:6px 0 0; font-size:12.5px; font-weight:600; color:var(--aqua)}
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <header class="topnav">
+    <div class="topnav-inner">
+      <button class="rail-top" data-go="menu" aria-label="Ir al inicio"><span class="sq"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg></span><span class="lbl">Homologador</span></button>
+      <nav class="navlist" aria-label="Secciones">
+        <button class="nav-item" data-go="menu" data-nav="menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span class="lbl">Inicio</span></button>
+        <button class="nav-item" data-go="homologar" data-nav="homologar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h9"/></svg><span class="lbl">Homologar</span></button>
+        <button class="nav-item" data-go="catalogo" data-nav="catalogo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg><span class="lbl">Consultar catálogo</span></button>
+        <button class="nav-item" data-go="consultas" data-nav="consultas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><span class="lbl">Consultas rápidas</span></button>
+      </nav>
+      <div class="top-actions">
+        <span class="ver">V 0.15</span>
+        <button class="icon-btn theme-toggle" type="button"></button>
+      </div>
+    </div>
+  </header>
+
+  <div class="content">
+    <div class="pathbar">
+      <button class="back" id="back" aria-label="Regresar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+      <nav class="path" id="path" aria-label="Ubicación"></nav>
+    </div>
+
+    <main>
+
+    <!-- ======================= VISTA: INICIO ======================= -->
+    <section id="view-menu" class="view active">
+      <span class="eyebrow"></span>
+      <h3 class="title">Selecciona qué quieres hacer</h3>
+      <p class="lead">Homologa el formato de un proveedor, consulta el catálogo maestro o busca un servicio al instante.</p>
+      <div class="blocks">
+        <button class="block b-homologar" data-go="homologar">
+          <h4>Homologar</h4>
+          <p>Elige el cliente, sube el formato del proveedor y recibe el mismo archivo con los códigos CALLMED. Los precios no se tocan.</p>
+          <span class="arrow">Entrar →</span>
+          <svg class="big" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h9"/></svg>
+        </button>
+        <button class="block b-catalogo" data-go="catalogo">
+          <h4>Consultar catálogo</h4>
+          <p>Altas, bajas y consultas del catálogo maestro, cada código con su cliente.</p>
+          <span class="arrow">Entrar →</span>
+          <svg class="big" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>
+        </button>
+        <button class="block b-consultas" data-go="consultas">
+          <h4>Consultas rápidas</h4>
+          <p>Busca por código o por descripción, solo entre los códigos de un cliente.</p>
+          <span class="arrow">Entrar →</span>
+          <svg class="big" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        </button>
+      </div>
+      <div class="strip">
+        <div class="tile">
+          <h5>Homologar para un cliente</h5>
+          <div class="chips" id="chips"><p class="empty">Cargando clientes…</p></div>
+        </div>
+        <div class="tile">
+          <h5>Búsqueda rápida de CPT</h5>
+          <form class="qs" id="quickForm"><input id="quickCpt" type="text" placeholder="Ej. 99203"><button type="submit">Ir</button></form>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================= VISTA: HOMOLOGAR ======================= -->
+    <section id="view-homologar" class="view">
+      <header class="top">
+        <div>
+          <h1>Homologar</h1>
+          <p>Elige el cliente, sube el formato del proveedor y recibe el mismo archivo con las columnas A, B y C llenas. Los precios y demás datos no se tocan.</p>
+        </div>
+      </header>
+
+      <div id="h-avisos"></div>
+
+      <div class="step c1">
+        <h2><span class="num">1</span> Cliente</h2>
+        <select id="h-cliente"><option value="">Cargando clientes…</option></select>
+        <div id="h-cliente-info" class="cliente-info"></div>
+      </div>
+
+      <div class="step c2">
+        <h2><span class="num">2</span> Archivo del proveedor (formato BI estándar)</h2>
+        <div class="zona" id="h-zona">
+          <input type="file" id="h-input-archivo" accept=".xlsx">
+          <b>Arrastra o haz clic</b> para subir el archivo .xlsx
+          <div id="h-archivo-info"></div>
+        </div>
+        <div class="cliente-info">Formato BI: las columnas A, B y C (CALLMED) se llenan; de la D a la K (proveedor, precios y nota) no se toca nada.</div>
+      </div>
+
+      <div class="step c3">
+        <h2><span class="num">3</span> Homologar</h2>
+        <div class="acciones">
+          <label class="chk"><input type="checkbox" id="h-chk-ia" checked> Usar IA (Motor 4) en los casos que no quedan claros</label>
+          <label class="chk" title="Un código CALLMED lo usa un solo renglón del proveedor. Si dos renglones distintos caen en el mismo código, se queda el que más se parece y el otro pasa a su siguiente opción razonable o queda sin código."><input type="checkbox" id="h-evitar-repetidos" checked> Evitar códigos CALLMED repetidos</label>
+          <label class="chk" title="Etapa adicional entre el texto y el significado. Si el texto trae abreviaturas o sinónimos, busca también con el texto expandido; y si el código que iba a salir verde tiene una diferencia clínica dura (tipo de muestra, región, fracción, inmunoglobulina, método, contraste o número), no lo deja salir verde. Nunca sube un renglón a verde."><input type="checkbox" id="h-motor2b" checked> Motor 2B · diccionario y criterio clínico</label>
+          <label class="chk umbral" title="Coincidencia mínima para marcar verde. Por debajo de este porcentaje el renglón queda en revisión humana.">Confianza mínima para verde <input type="number" id="h-umbral" min="50" max="100" step="1" value="80"> %</label>
+          <label class="chk umbral" title="Cuántos renglones se procesan al mismo tiempo. Más renglones a la vez es más rápido; si ves avisos de saturación o errores, bájalo. El resultado de cada renglón es el mismo con cualquier valor.">Renglones a la vez <input type="number" id="h-concurrencia" min="1" max="8" step="1" value="4"></label>
+          <button class="primary" id="h-btn-homologar" disabled>Homologar</button>
+          <button class="ghost" id="h-btn-detener" disabled>Detener</button>
+        </div>
+        <div class="ia-panel">
+          <div class="ia-fila">
+            <span class="ia-estado" id="h-ia-estado">IA sin probar</span>
+            <button class="ghost small" id="h-btn-probar-ia" type="button">Probar conexión con la IA</button>
+            <button class="ghost small" id="h-btn-llave-ia" type="button">Configurar llave</button>
+          </div>
+          <div id="h-ia-llave-form">
+            <input type="password" id="h-ia-llave" placeholder="Pega tu llave de Groq (empieza con gsk_)" autocomplete="off">
+            <button class="primary small" id="h-ia-guardar" type="button">Guardar</button>
+          </div>
+          <div id="h-ia-modelo-fila">
+            <label for="h-ia-modelo">Modelo de IA</label>
+            <select id="h-ia-modelo"></select>
+            <button class="primary small" id="h-ia-usar-modelo" type="button">Usar este modelo</button>
+          </div>
+          <div class="ia-detalle" id="h-ia-detalle"></div>
+        </div>
+        <details class="dic-panel" id="h-dic-panel">
+          <summary>Diccionario clínico del Motor 2B <span id="h-dic-cuenta"></span></summary>
+          <p class="dic-ayuda">Una regla por línea: ABREVIATURA = EXPANSIÓN. Las variantes se separan con barra (TGO / AST). Los cambios se guardan en este navegador y se usan en la siguiente corrida.</p>
+          <label for="h-dic-abbr">Abreviaturas</label>
+          <textarea id="h-dic-abbr" rows="8" spellcheck="false"></textarea>
+          <label for="h-dic-sin">Sinónimos clínicos</label>
+          <textarea id="h-dic-sin" rows="5" spellcheck="false"></textarea>
+          <button class="ghost small" id="h-dic-restaurar" type="button">Restaurar diccionario original</button>
+        </details>
+        <div class="progreso" id="h-progreso">
+          <div class="barra-fondo"><div id="h-barra"></div></div>
+          <div id="h-progreso-texto"></div>
+        </div>
+      </div>
+
+      <div class="step c1">
+        <h2><span class="num">4</span> Resultado</h2>
+        <div id="h-cliente-resultado" class="cliente-resultado"></div>
+        <div class="contadores">
+          <div class="cnt"><span class="v" id="h-cnt-total">0</span><span class="l">Renglones</span></div>
+          <div class="cnt auto"><span class="v" id="h-cnt-auto">0</span><span class="l">Alta confianza</span></div>
+          <div class="cnt revisar"><span class="v" id="h-cnt-revisar">0</span><span class="l">A revisar</span></div>
+          <div class="cnt sin"><span class="v" id="h-cnt-sin">0</span><span class="l">Sin equivalente</span></div>
+          <div class="cnt error" id="h-caja-error" style="display:none"><span class="v" id="h-cnt-error">0</span><span class="l">Con error</span></div>
+        </div>
+        <div id="h-distribucion" class="distribucion"></div>
+        <div class="leyenda">Colores en el archivo, solo en A, B y C:
+          <i style="background:#D9EAD3"></i>alta confianza (o confirmado por una persona)
+          <i style="background:#FFF2CC"></i>revisión humana (trae una sugerencia)
+          <i style="background:#F4CCCC"></i>sin equivalente (vacío)
+        </div>
+
+        <div class="barra-tabs">
+          <div class="tabs">
+            <button class="activo" id="h-tab-todos" data-filtro="todos">Todos (0)</button>
+            <button id="h-tab-auto" data-filtro="auto">Alta confianza (0)</button>
+            <button id="h-tab-revisar" data-filtro="revisar">A revisar (0)</button>
+            <button id="h-tab-sin" data-filtro="sin">Sin equivalente (0)</button>
+          </div>
+          <button class="primary" id="h-btn-descargar" disabled>Descargar archivo homologado</button>
+        </div>
+        <div id="h-msg-integridad" class="integridad"></div>
+        <div id="h-ajustes" class="aviso" style="display:none"></div>
+        <div id="h-duplicados" class="aviso warn" style="display:none"></div>
+
+        <div class="tabla-wrap">
+          <table>
+            <thead>
+              <tr><th>Fila</th><th>Descripción del proveedor</th><th>CALLMED asignado</th><th>Coincidencia</th><th>Cómo se resolvió</th><th>Estatus</th><th></th></tr>
+            </thead>
+            <tbody id="h-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <footer class="note">Las búsquedas siempre se filtran por el cliente elegido. "Confirmar" guarda el emparejamiento para ese cliente, de modo que la próxima vez se resuelva solo.</footer>
+    </section>
+
+    <!-- ======================= VISTA: CONSULTAR CATÁLOGO ======================= -->
+    <section id="view-catalogo" class="view">
+      <header class="top">
+        <div>
+          <h1>Consultar catálogo</h1>
+          <p>Catálogo maestro CALLMED, conectado en vivo a Supabase.</p>
+          <p class="solo-lectura-aviso" id="aviso-solo-lectura" style="display:none">Catálogo protegido: solo lectura. No se pueden dar altas, bajas ni cambios desde el programa.</p>
+        </div>
+        <div class="top-right">
+          <div class="counters">
+            <div class="counter"><span class="n" id="cnt-total">—</span><span class="label">Servicios en Supabase</span></div>
+            <div class="counter"><span class="n" id="cnt-mostrando">—</span><span class="label">Mostrando</span></div>
+          </div>
+          <div class="fecha" id="conn-status">conectando…</div>
+        </div>
+      </header>
+
+      <div id="alta-form" class="step" style="display:none;">
+        <h2><span class="num">+</span> Nueva alta</h2>
+        <div class="alta-grid">
+          <label>CPT<input type="text" id="alta-cpt" placeholder="Ej. LAB0001"></label>
+          <label>Descripción<input type="text" id="alta-descripcion" placeholder="Nombre del estudio/servicio"></label>
+          <label>Estatus
+            <select id="alta-estatus">
+              <option value="">Selecciona...</option>
+              <option value="Habilitado">Habilitado</option>
+              <option value="Deshabilitado">Deshabilitado</option>
+            </select>
+          </label>
+          <label>Tipo de servicio
+            <select id="alta-tipo">
+              <option value="">Selecciona...</option>
+              <option>LABORATORIO</option>
+              <option>GABINETE</option>
+              <option>ENFERMERÍA</option>
+              <option>OXÍGENO</option>
+              <option>APARATOS ORTOPÉDICOS</option>
+              <option>IMAGENOLOGIA</option>
+              <option>REHABILITACIÓN</option>
+              <option>INSUMOS INTRAHOSPITALARIOS</option>
+              <option>AMBULANCIA</option>
+              <option>SERVICIOS REFERIDOS</option>
+              <option>GABINETE OFTALMOLOGICO</option>
+              <option>ÓPTICA</option>
+              <option>MEDICINA NUCLEAR</option>
+              <option>HEMODIÁLISIS</option>
+              <option>RADIOTERAPIA</option>
+              <option>PATOLOGIA</option>
+              <option>OXÍGENO N/A IVA</option>
+              <option>RENTA DE EQUIPO Y APTOS MÉDICOS QUIRÚRGICOS</option>
+              <option>CIRUGIA CORTA ESTANCIA</option>
+              <option>QUIMIOTERAPIA</option>
+              <option>VACUNAS</option>
+              <option>GASTOS OPERATIVOS Y ADMINISTRATIVOS</option>
+              <option>ATENCIONES DE URGENCIA</option>
+              <option>ESTUDIOS GENOMICOS</option>
+              <option>HOSPITALIZACIÓN (EGRESO + DE 24 HRS)</option>
+              <option>HOSPITALIZACIÓN</option>
+              <option>Medicamentos NA IVA Servicios de apoyo</option>
+              <option>SERVICIOS INTEGRALES</option>
+              <option>CONSULTA EN HOSPITAL</option>
+              <option>Medicamentos NA IVA Hospitalización</option>
+            </select>
+          </label>
+          <label>Grupo de servicio
+            <select id="alta-grupo">
+              <option value="">Selecciona...</option>
+              <option value="Auxiliares Dx y Tratamiento">Auxiliares Dx y Tratamiento</option>
+              <option value="Servicios de apoyo">Servicios de apoyo</option>
+              <option value="Hospitalizacion">Hospitalización</option>
+            </select>
+          </label>
+          <label>Cliente (grupo de códigos)
+            <select id="alta-cliente"><option value="">Selecciona...</option></select>
+          </label>
+        </div>
+        <div class="alta-actions">
+          <button class="ghost small" onclick="cerrarFormAlta()">Cancelar</button>
+          <button class="primary small" onclick="guardarAlta()">Guardar en Supabase</button>
+        </div>
+        <div id="alta-msg" class="form-msg"></div>
+      </div>
+
+      <div class="step c3" id="card-embeddings">
+        <h2><span class="num">⚙</span> Motor 3 · Embeddings semánticos</h2>
+        <p style="margin:0 0 12px; color:var(--ink-soft); font-size:12.5px;">
+          Ejecuta esto una sola vez (y de nuevo cada vez que des de alta servicios nuevos sin embedding).
+          Puede tardar varios minutos con 32,000+ filas.
+        </p>
+        <button class="ghost small" id="btn-generar-embeddings" onclick="generarEmbeddingsFaltantes()">Generar embeddings faltantes</button>
+        <div id="estado-embeddings" class="form-msg"></div>
+      </div>
+
+      <div class="toolbar">
+        <div class="searchbar">
+          <input type="text" id="buscar-input" placeholder="Buscar por CPT o descripción...">
+          <select id="filtro-tipo">
+            <option value="">Tipo de servicio: Todos</option>
+            <option>LABORATORIO</option>
+            <option>GABINETE</option>
+            <option>ENFERMERÍA</option>
+            <option>OXÍGENO</option>
+            <option>APARATOS ORTOPÉDICOS</option>
+            <option>IMAGENOLOGIA</option>
+            <option>REHABILITACIÓN</option>
+            <option>INSUMOS INTRAHOSPITALARIOS</option>
+            <option>AMBULANCIA</option>
+            <option>SERVICIOS REFERIDOS</option>
+            <option>GABINETE OFTALMOLOGICO</option>
+            <option>ÓPTICA</option>
+            <option>MEDICINA NUCLEAR</option>
+            <option>HEMODIÁLISIS</option>
+            <option>RADIOTERAPIA</option>
+            <option>PATOLOGIA</option>
+            <option>OXÍGENO N/A IVA</option>
+            <option>RENTA DE EQUIPO Y APTOS MÉDICOS QUIRÚRGICOS</option>
+            <option>CIRUGIA CORTA ESTANCIA</option>
+            <option>QUIMIOTERAPIA</option>
+            <option>VACUNAS</option>
+            <option>GASTOS OPERATIVOS Y ADMINISTRATIVOS</option>
+            <option>ATENCIONES DE URGENCIA</option>
+            <option>ESTUDIOS GENOMICOS</option>
+            <option>HOSPITALIZACIÓN (EGRESO + DE 24 HRS)</option>
+            <option>HOSPITALIZACIÓN</option>
+            <option>Medicamentos NA IVA Servicios de apoyo</option>
+            <option>SERVICIOS INTEGRALES</option>
+            <option>CONSULTA EN HOSPITAL</option>
+            <option>Medicamentos NA IVA Hospitalización</option>
+          </select>
+          <select id="filtro-cliente"><option value="">Cliente: Todos</option></select>
+          <button class="ghost small" onclick="recargarDesdeInicio()">Buscar</button>
+        </div>
+        <button class="primary small" id="btn-nueva-alta" onclick="abrirFormAlta()">+ Nueva alta</button>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>CPT</th>
+            <th>Descripción</th>
+            <th>Estatus</th>
+            <th>Tipo de servicio</th>
+            <th>Grupo de servicio</th>
+            <th>Cliente</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="catalogo-tbody">
+          <tr><td colspan="7" class="tabla-msg">Cargando catálogo desde Supabase…</td></tr>
+        </tbody>
+      </table>
+
+      <div class="paginacion">
+        <button class="ghost small" id="btn-anterior" onclick="paginaAnterior()" disabled>← Anterior</button>
+        <span id="pagina-info" class="mono">—</span>
+        <button class="ghost small" id="btn-siguiente" onclick="paginaSiguiente()" disabled>Siguiente →</button>
+      </div>
+
+      <footer class="note">Conectado a Supabase · tabla <span class="mono">catalogo</span>. Los cambios de alta/baja son reales e inmediatos.</footer>
+    </section>
+
+    <!-- ======================= VISTA: CONSULTAS RÁPIDAS ======================= -->
+    <section id="view-consultas" class="view">
+      <header class="top">
+        <div>
+          <h1>Consultas rápidas</h1>
+          <p>Busca un servicio por su código, o por descripción como en un buscador — no hace falta escribirlo exacto ni en el mismo orden.</p>
+        </div>
+      </header>
+
+      <div class="step c1">
+        <h2><span class="num">0</span> Cliente</h2>
+        <select id="q-cliente"><option value="">Cargando clientes…</option></select>
+        <div id="q-cliente-info" class="cliente-info"></div>
+      </div>
+
+      <div class="step c2">
+        <h2><span class="num">#</span> Buscar por ID (CPT)</h2>
+        <input type="text" id="q-id-input" placeholder="Ej. LAB15001NN" style="max-width:340px;">
+        <div id="q-id-resultados" style="margin-top:14px;"></div>
+      </div>
+
+      <div class="step c3">
+        <h2><span class="num">Aa</span> Buscar por descripción</h2>
+        <div class="autocomplete-wrap">
+          <input type="text" id="q-desc-input" placeholder="Ej. mascarilla de oxígeno para adulto" autocomplete="off">
+          <div id="q-desc-lista" class="autocomplete-list"></div>
+        </div>
+        <div id="q-desc-tabla-wrap" style="margin-top:16px; display:none;">
+          <table>
+            <thead>
+              <tr><th>CPT</th><th>Descripción</th><th>Tipo de servicio</th></tr>
+            </thead>
+            <tbody id="q-desc-tabla-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <footer class="note">Ambos buscadores consultan tu catálogo en Supabase y solo muestran los códigos del cliente elegido.</footer>
+    </section>
+
+    </main>
+  </div>
+</div>
+
+<script src="config.local.js" onerror="this.remove()"></script>
+  <script type="module">
+
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+// ============ supabase-client.js ============
+// ---------------------------------------------------------------------
+// Conexión única a Supabase, compartida por todos los módulos.
+// La llave pública (anon/publishable) es segura de tener aquí SIEMPRE
+// que la tabla "catalogo" tenga Row Level Security con políticas
+// correctas configuradas del lado de Supabase.
+// ---------------------------------------------------------------------
+
+const SUPABASE_URL = 'https://pejszpekljsantcpzdlb.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_ZtB5A_z_LPCxmBHuZ4-k2w_a4TWjfyB';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const TABLA_CATALOGO = 'catalogo';
+
+// El catálogo es de SOLO LECTURA: desde el programa no se puede dar de alta, dar de baja ni cambiar nada.
+// (La protección real está en la base de datos: script 09. Esto solo evita ofrecer botones que ya no funcionarían.)
+// Para mantenimiento: CATALOGO_SOLO_LECTURA: false en config.local.js y desbloquear la base (script 09).
+const CATALOGO_SOLO_LECTURA = (window.HOMOLOGADOR_LOCAL || {}).CATALOGO_SOLO_LECTURA !== false;
+function bloqueoSoloLectura() {
+  try { alert('El catálogo está protegido: solo lectura. No se pueden dar altas, bajas ni cambios desde el programa.'); } catch (e) { /* sin alert */ }
+}
+if (CATALOGO_SOLO_LECTURA) {
+  document.documentElement.classList.add('solo-lectura');
+  const aviso = document.getElementById('aviso-solo-lectura'); if (aviso) aviso.style.display = 'block';
+}
+
+function escapeHtml(s) {
+  return (s ?? '').toString().replace(/[&<>"']/g, m => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[m]));
+}
+
+
+// ============ config.js ============
+// ---------------------------------------------------------------------
+// Configuración de los motores 3 y 4.
+// ---------------------------------------------------------------------
+
+// URL de la Edge Function del Motor 3 (ya calculada a partir de tu proyecto).
+const EMBEDDING_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/generar-embedding`;
+const EMBEDDING_FUNCTION_KEY = SUPABASE_KEY; // misma llave pública
+
+// ---------------------------------------------------------------------
+// MOTOR 4 — pega aquí tu llave gratuita de Groq (console.groq.com).
+// Sin esto, el Motor 4 no va a poder llamarse y el pipeline se detiene
+// en el resultado del Motor 3.
+// ---------------------------------------------------------------------
+const GROQ_API_KEY = '';
+const GROQ_MODEL = 'llama-3.3-70b-versatile';
+
+// ============ nav.js ============
+// Navegación por menú superior con barra de ubicación (#hash) y cambio de tema claro/oscuro.
+// No contiene lógica de negocio.
+const VISTAS = { menu: 'Menú inicial', homologar: 'Homologar', catalogo: 'Consultar catálogo', consultas: 'Consultas rápidas' };
+
+function renderVista() {
+  let r = location.hash.slice(1);
+  if (!VISTAS[r]) r = 'menu';
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-' + r).classList.add('active');
+  document.querySelectorAll('.nav-item[data-nav]').forEach(n => n.classList.toggle('active', n.dataset.nav === r));
+
+  const ruta = document.getElementById('path');
+  ruta.innerHTML = '';
+  const lista = r === 'menu' ? [{ label: VISTAS.menu, go: 'menu' }] : [{ label: VISTAS.menu, go: 'menu' }, { label: VISTAS[r], go: r }];
+  lista.forEach((c, i) => {
+    if (i) { const s = document.createElement('span'); s.className = 'sep'; s.textContent = '›'; ruta.appendChild(s); }
+    const ultimo = i === lista.length - 1;
+    const el = document.createElement(ultimo ? 'span' : 'button');
+    el.textContent = c.label;
+    if (ultimo) el.className = 'here'; else el.dataset.go = c.go;
+    ruta.appendChild(el);
+  });
+  const atras = document.getElementById('back');
+  atras.disabled = lista.length < 2;
+  atras.dataset.go = lista.length > 1 ? lista[lista.length - 2].go : '';
+  try { window.scrollTo(0, 0); } catch (e) { /* sin desplazamiento en entornos de prueba */ }
+}
+function ir(r) { if (location.hash !== '#' + r) location.hash = r; renderVista(); }   // redibuja de inmediato; hashchange cubre el botón Atrás del navegador
+
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-go]');
+  if (el && !el.disabled && el.dataset.go) ir(el.dataset.go);
+});
+window.addEventListener('hashchange', renderVista);
+window.mostrarVista = id => ir(id);   // se conserva por compatibilidad
+
+// Accesos rápidos del menú inicial
+document.getElementById('chips').addEventListener('click', e => {
+  const chip = e.target.closest('[data-cliente]');
+  if (!chip) return;
+  const sel = document.getElementById('h-cliente');
+  sel.value = chip.dataset.cliente;
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+  ir('homologar');
+});
+document.getElementById('quickForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const valor = document.getElementById('quickCpt').value.trim();
+  ir('consultas');
+  if (valor) {
+    const campo = document.getElementById('q-id-input');
+    campo.value = valor;
+    campo.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+});
+
+// ---- Tema claro / oscuro (la preferencia se recuerda en este navegador) ----
+const rootEl = document.documentElement;
+const ICONO_LUNA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
+const ICONO_SOL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+const esquemaOscuro = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+function temaActual() { return rootEl.dataset.theme || (esquemaOscuro && esquemaOscuro.matches ? 'dark' : 'light'); }
+function pintarTema() {
+  const oscuro = temaActual() === 'dark';
+  document.querySelectorAll('.theme-toggle').forEach(b => {
+    b.innerHTML = (oscuro ? ICONO_SOL : ICONO_LUNA) + '<span class="lbl">' + (oscuro ? 'Modo claro' : 'Modo oscuro') + '</span>';
+    b.setAttribute('aria-label', oscuro ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro');
+  });
+}
+try { const t = localStorage.getItem('homologador-theme'); if (t) rootEl.dataset.theme = t; } catch (e) { /* sin almacenamiento */ }
+document.querySelectorAll('.theme-toggle').forEach(b => b.addEventListener('click', () => {
+  const siguiente = temaActual() === 'dark' ? 'light' : 'dark';
+  rootEl.dataset.theme = siguiente;
+  try { localStorage.setItem('homologador-theme', siguiente); } catch (e) { /* sin almacenamiento */ }
+  pintarTema();
+}));
+if (esquemaOscuro && esquemaOscuro.addEventListener) esquemaOscuro.addEventListener('change', pintarTema);
+pintarTema();
+renderVista();
+
+
+// ============ catalogo.js ============
+
+const PAGE_SIZE = 25;
+let paginaActual = 0;
+let totalFilas = 0;
+let tieneColumnaId = null; // se detecta con la primera consulta
+
+const tbody = document.getElementById('catalogo-tbody');
+const cntTotal = document.getElementById('cnt-total');
+const cntMostrando = document.getElementById('cnt-mostrando');
+const connStatus = document.getElementById('conn-status');
+const pagInfo = document.getElementById('pagina-info');
+const btnAnterior = document.getElementById('btn-anterior');
+const btnSiguiente = document.getElementById('btn-siguiente');
+
+async function cargarCatalogo() {
+  tbody.innerHTML = '<tr><td colspan="7" class="tabla-msg">Consultando Supabase…</td></tr>';
+  connStatus.textContent = 'consultando…';
+
+  const q = document.getElementById('buscar-input').value.trim();
+  const tipo = document.getElementById('filtro-tipo').value;
+  const from = paginaActual * PAGE_SIZE;
+  const to = from + PAGE_SIZE - 1;
+
+  let query = supabase.from(TABLA_CATALOGO).select('*', { count: 'exact' }).range(from, to);
+
+  if (q) {
+    query = query.or(`cpt.ilike.%${q}%,descripcion.ilike.%${q}%`);
+  }
+  if (tipo) {
+    query = query.eq('tipo_de_servicio', tipo);
+  }
+  const clienteFiltro = document.getElementById('filtro-cliente').value;
+  if (clienteFiltro) {
+    query = query.eq('cliente', clienteFiltro);
+  }
+
+  const { data, error, count } = await query;
+
+  if (error) {
+    connStatus.textContent = 'error de conexión';
+    tbody.innerHTML = `<tr><td colspan="7" class="tabla-msg">No se pudo consultar Supabase: ${escapeHtml(error.message)}</td></tr>`;
+    return;
+  }
+
+  connStatus.textContent = 'conectado';
+  totalFilas = count ?? 0;
+  cntTotal.textContent = totalFilas.toLocaleString('es-MX');
+
+  if (tieneColumnaId === null) {
+    tieneColumnaId = data.length > 0 && Object.prototype.hasOwnProperty.call(data[0], 'id');
+  }
+
+  if (!data || data.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="tabla-msg">Sin resultados para esta búsqueda.</td></tr>';
+  } else {
+    tbody.innerHTML = data.map(row => `
+      <tr>
+        <td class="code">${escapeHtml(row.cpt)}</td>
+        <td>${escapeHtml(row.descripcion)}</td>
+        <td>${escapeHtml(row.estatus)}</td>
+        <td>${escapeHtml(row.tipo_de_servicio)}</td>
+        <td>${escapeHtml(row.grupo_servicio)}</td>
+        <td>${escapeHtml(row.cliente)}</td>
+        <td><button class="btn-baja" onclick='eliminarFila(${JSON.stringify(row).replace(/'/g, "&#39;")})'>Eliminar</button></td>
+      </tr>
+    `).join('');
+  }
+
+  cntMostrando.textContent = data.length ? `${from + 1}–${from + data.length}` : '0';
+  pagInfo.textContent = `Página ${paginaActual + 1} de ${Math.max(1, Math.ceil(totalFilas / PAGE_SIZE))}`;
+  btnAnterior.disabled = paginaActual === 0;
+  btnSiguiente.disabled = to + 1 >= totalFilas;
+}
+
+function recargarDesdeInicio() {
+  paginaActual = 0;
+  cargarCatalogo();
+}
+function paginaAnterior() {
+  if (paginaActual > 0) { paginaActual--; cargarCatalogo(); }
+}
+function paginaSiguiente() {
+  paginaActual++; cargarCatalogo();
+}
+
+// --- ALTAS ---
+function abrirFormAlta() {
+  if (CATALOGO_SOLO_LECTURA) return bloqueoSoloLectura();
+  document.getElementById('alta-form').style.display = 'block';
+  document.getElementById('alta-msg').textContent = '';
+}
+function cerrarFormAlta() {
+  document.getElementById('alta-form').style.display = 'none';
+}
+async function guardarAlta() {
+  if (CATALOGO_SOLO_LECTURA) return bloqueoSoloLectura();
+  const nuevo = {
+    cpt: document.getElementById('alta-cpt').value.trim(),
+    descripcion: document.getElementById('alta-descripcion').value.trim(),
+    estatus: document.getElementById('alta-estatus').value.trim(),
+    tipo_de_servicio: document.getElementById('alta-tipo').value.trim(),
+    grupo_servicio: document.getElementById('alta-grupo').value.trim(),
+    cliente: document.getElementById('alta-cliente').value.trim(),
+  };
+  const msg = document.getElementById('alta-msg');
+  if (!nuevo.cpt || !nuevo.descripcion) {
+    msg.textContent = 'CPT y Descripción son obligatorios.';
+    msg.className = 'form-msg error';
+    return;
+  }
+  if (!nuevo.estatus || !nuevo.tipo_de_servicio || !nuevo.grupo_servicio) {
+    msg.textContent = 'Selecciona Estatus, Tipo de servicio y Grupo de servicio.';
+    msg.className = 'form-msg error';
+    return;
+  }
+  if (!nuevo.cliente) {
+    msg.textContent = 'Selecciona el cliente al que pertenece este código.';
+    msg.className = 'form-msg error';
+    return;
+  }
+  msg.textContent = 'Guardando...';
+  msg.className = 'form-msg';
+  const { error } = await supabase.from(TABLA_CATALOGO).insert([nuevo]);
+  if (error) {
+    msg.textContent = 'Error al guardar: ' + error.message;
+    msg.className = 'form-msg error';
+    return;
+  }
+  msg.textContent = 'Servicio agregado correctamente.';
+  msg.className = 'form-msg ok';
+  ['alta-cpt', 'alta-descripcion', 'alta-estatus', 'alta-tipo', 'alta-grupo', 'alta-cliente'].forEach(id => document.getElementById(id).value = '');
+  paginaActual = 0;
+  cargarCatalogo();
+}
+
+// --- BAJAS ---
+async function eliminarFila(row) {
+  if (CATALOGO_SOLO_LECTURA) return bloqueoSoloLectura();
+  const ok = confirm(`¿Eliminar "${row.descripcion}" (${row.cpt}) del catálogo? Esta acción no se puede deshacer.`);
+  if (!ok) return;
+
+  let query = supabase.from(TABLA_CATALOGO).delete();
+  const condicionCliente = q => (row.cliente == null ? q.is('cliente', null) : q.eq('cliente', row.cliente));
+  if (tieneColumnaId && row.id !== undefined) {
+    query = query.eq('id', row.id);
+  } else {
+    // Sin columna id: se identifica la fila por la combinación completa de columnas
+    // para no afectar por error otra fila con el mismo CPT repetido.
+    query = condicionCliente(query
+      .eq('cpt', row.cpt)
+      .eq('descripcion', row.descripcion)
+      .eq('estatus', row.estatus)
+      .eq('tipo_de_servicio', row.tipo_de_servicio)
+      .eq('grupo_servicio', row.grupo_servicio));
+  }
+  const { error } = await query;
+  if (error) {
+    alert('No se pudo eliminar: ' + error.message);
+    return;
+  }
+  cargarCatalogo();
+}
+
+// Se exponen en window porque el HTML las llama desde onclick.
+window.recargarDesdeInicio = recargarDesdeInicio;
+window.paginaAnterior = paginaAnterior;
+window.paginaSiguiente = paginaSiguiente;
+window.abrirFormAlta = abrirFormAlta;
+window.cerrarFormAlta = cerrarFormAlta;
+window.guardarAlta = guardarAlta;
+window.eliminarFila = eliminarFila;
+
+
+// ============ homologar: formato + cliente (core y pantalla) ============
+const CONFIG = {
+  SUPABASE_URL, SUPABASE_KEY,
+  EMBEDDING_URL: EMBEDDING_FUNCTION_URL,
+  GROQ_API_KEY, GROQ_MODEL,
+  GROQ_PROXY_URL: `${SUPABASE_URL}/functions/v1/groq-proxy`,     // función en Supabase que guarda la llave de Groq
+};
+
+// Archivo OPCIONAL config.local.js (junto a este HTML): ahí se guarda la llave de Groq una sola vez.
+// No viaja dentro del HTML, no lo pisa ninguna versión nueva y no se sube a ningún repositorio.
+const LOCAL = window.HOMOLOGADOR_LOCAL || {};
+
+// =====================================================================
+// MOTOR 2B · DICCIONARIO Y CRITERIO CLÍNICO
+// Código tomado del archivo "homologador__3__1.html" (Homologador de catálogos médicos) del equipo.
+// Único cambio: se exporta la función `clinical` para compararla renglón contra candidato.
+// Aquí NO se usa su puntaje ni su índice: solo su diccionario (abreviaturas y sinónimos) y su criterio clínico.
+// =====================================================================
+/* ===== Motor de homologación ===== */
+var HOMO = (function () {
+  'use strict';
+
+  var DEFAULT_ABBR = [
+    'BH = BIOMETRIA HEMATICA',
+    'QS = QUIMICA SANGUINEA',
+    'EGO = EXAMEN GENERAL DE ORINA',
+    'PSA / APE = ANTIGENO PROSTATICO ESPECIFICO',
+    'TGO / AST = ASPARTATO AMINOTRANSFERASA',
+    'TGP / ALT = ALANINO AMINOTRANSFERASA',
+    'TRANSAMINASAS = TGO + TGP',
+    'PCR = PROTEINA C REACTIVA',
+    'VSG = VELOCIDAD DE SEDIMENTACION GLOBULAR',
+    'TSH = HORMONA ESTIMULANTE DE TIROIDES',
+    'T3 = TRIIODOTIRONINA',
+    'T4 = TIROXINA',
+    'HBA1C = HEMOGLOBINA GLUCOSILADA',
+    'DHL / LDH = DESHIDROGENASA LACTICA',
+    'FA = FOSFATASA ALCALINA',
+    'CPK = CREATINFOSFOQUINASA',
+    'TP = TIEMPO DE PROTROMBINA',
+    'TPT = TIEMPO DE TROMBOPLASTINA PARCIAL',
+    'VIH / HIV = VIRUS DE INMUNODEFICIENCIA HUMANA',
+    'HGC / HCG = GONADOTROPINA CORIONICA HUMANA',
+    'IGG = INMUNOGLOBULINA G',
+    'IGM = INMUNOGLOBULINA M',
+    'IGA = INMUNOGLOBULINA A',
+    'IGE = INMUNOGLOBULINA E',
+    'AG = ANTIGENO',
+    'RX = RADIOGRAFIA',
+    'USG = ULTRASONIDO',
+    'TAC = TOMOGRAFIA',
+    'RM / RMN = RESONANCIA MAGNETICA',
+    'EKG / ECG = ELECTROCARDIOGRAMA',
+    'HAB = HABITACION'
+  ].join('\n');
+
+  var EXTRA_ABBR = [
+    'BAAR = BACILO ACIDO ALCOHOL RESISTENTE',
+    'LH = HORMONA LUTEINIZANTE',
+    'FSH = HORMONA FOLICULO ESTIMULANTE',
+    'DHEA = DEHIDROEPIANDROSTERONA',
+    'GGT / GGTP = GAMMA GLUTAMIL TRANSPEPTIDASA',
+    'BUN = NITROGENO UREICO',
+    'CPS / COPRO = COPROPARASITOSCOPICO',
+    'PERF = PERFIL',
+    'GRAMM = GRAM',
+    'FR = FACTOR REUMATOIDE',
+    'ASO = ANTIESTREPTOLISINA O',
+    'TTP = TIEMPO DE TROMBOPLASTINA PARCIAL',
+    'INR = INDICE NORMALIZADO INTERNACIONAL',
+    'HB = HEMOGLOBINA',
+    'HTO = HEMATOCRITO',
+    'US = ULTRASONIDO',
+    'TC = TOMOGRAFIA',
+    'IRM / RNM = RESONANCIA MAGNETICA',
+    'EEG = ELECTROENCEFALOGRAMA',
+    'AFP = ALFA FETOPROTEINA',
+    'ACE / CEA = ANTIGENO CARCINOEMBRIONARIO',
+    'HBSAG = ANTIGENO DE SUPERFICIE HEPATITIS B',
+    'VHC = VIRUS HEPATITIS C',
+    'VHB = VIRUS HEPATITIS B',
+    'LCR = LIQUIDO CEFALORRAQUIDEO',
+    'PFH = PRUEBAS DE FUNCION HEPATICA',
+    'ACTH = HORMONA ADRENOCORTICOTROPA',
+    'PTH = PARATOHORMONA',
+    'T4L / FT4 = TIROXINA LIBRE',
+    'T3L / FT3 = TRIIODOTIRONINA LIBRE',
+    'HRS / HR / HS = HORAS',
+    'PAQ = PAQUETE',
+    'GPO = GRUPO',
+    'CUANT = CUANTITATIVO',
+    'CUAL = CUALITATIVO',
+    'DER = DERECHO',
+    'IZQ = IZQUIERDO',
+    'PROY = PROYECCIONES',
+    'CONTR = CONTRASTE'
+  ].join('\n');
+
+  var DEFAULT_SYN = [
+    'TINCION DE GRAM = GRAM',
+    'SEDIMENTACION GLOBULAR = VELOCIDAD DE SEDIMENTACION GLOBULAR',
+    'GLUCEMIA = GLUCOSA',
+    'GLICEMIA = GLUCOSA',
+    'GRUPO SANGUINEO Y FACTOR RH = GRUPO SANGUINEO Y RH',
+    'ANTIESTREPTOLISINAS = ANTIESTREPTOLISINA O',
+    'CREATINCINASA = CREATINFOSFOQUINASA',
+    'CREATINQUINASA = CREATINFOSFOQUINASA',
+    'CREATINFOSFOCINASA = CREATINFOSFOQUINASA',
+    'HEMOGLOBINA GLICOSILADA = HEMOGLOBINA GLUCOSILADA',
+    'HEMOGLOBINA GLICADA = HEMOGLOBINA GLUCOSILADA',
+    'ECOGRAFIA = ULTRASONIDO',
+    'ECOSONOGRAFIA = ULTRASONIDO',
+    'TOMOGRAFIA AXIAL COMPUTARIZADA = TOMOGRAFIA',
+    'TOMOGRAFIA COMPUTADA = TOMOGRAFIA',
+    'SIN CONTRASTE = SIMPLE',
+    'CON CONTRASTE = CONTRASTADO',
+    'CONTRASTADA = CONTRASTADO',
+    'PERFIL LIPIDICO = PERFIL DE LIPIDOS',
+    'LIPIDOGRAMA = PERFIL DE LIPIDOS',
+    'HORMONA DE CRECIMIENTO = HORMONA DEL CRECIMIENTO',
+    'SOMATOTROPINA = HORMONA DEL CRECIMIENTO',
+    'CORTISOL SERICO = CORTISOL'
+  ].join('\n');
+
+  var STOP = toSet('DE DEL LA EL LOS LAS Y E EN PARA POR AL A U O CON'.split(' '));
+  // CON se elimina sólo después de los sinónimos (CON CONTRASTE ya se canonizó)
+  var GENERIC = toSet('SUERO SERICO SERICA SERICOS SERICAS DETERMINACION PRUEBA NIVEL NIVELES PBA ESTUDIO'.split(' '));
+  var LOWINFO = toSet('HORA MUESTRA ORINA SANGRE PERFIL COMPLETO COMPLETA TOTAL SERIE ELEMENTO PARAMETRO'.split(' '));
+  var ROMAN = { I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6, VII: 7, VIII: 8, IX: 9, X: 10 };
+
+  var SAMPLE = {
+    ORINA: 'ORINA', URINARIO: 'ORINA', URINARIA: 'ORINA',
+    HECES: 'HECES', HECE: 'HECES', EXCREMENTO: 'HECES', COPROPARASITOSCOPICO: 'HECES', COPROLOGICO: 'HECES',
+    CEFALORRAQUIDEO: 'LCR', ESPUTO: 'ESPUTO', EXPECTORACION: 'ESPUTO', SEMEN: 'SEMEN', ESPERMATOBIOSCOPIA: 'SEMEN',
+    SALIVA: 'SALIVA', SINOVIAL: 'LIQ SINOVIAL', PLEURAL: 'LIQ PLEURAL', ASCITIS: 'LIQ ASCITIS', PERITONEAL: 'LIQ PERITONEAL',
+    SUERO: 'SUERO', SERICO: 'SUERO', SERICA: 'SUERO', PLASMA: 'SUERO', SANGRE: 'SUERO'
+  };
+  var REGION = {
+    TORAX: 'TORAX', TORACICO: 'TORAX', TORACICA: 'TORAX', ABDOMEN: 'ABDOMEN', ABDOMINAL: 'ABDOMEN',
+    PELVIS: 'PELVIS', PELVICO: 'PELVIS', PELVICA: 'PELVIS', CRANEO: 'CRANEO', CRANEAL: 'CRANEO', CEREBRO: 'CRANEO', CEREBRAL: 'CRANEO',
+    CUELLO: 'CUELLO', CERVICAL: 'CERVICAL', DORSAL: 'DORSAL', LUMBAR: 'LUMBAR', LUMBOSACRA: 'LUMBOSACRA', SACRO: 'SACRO', COXIS: 'COXIS',
+    HOMBRO: 'HOMBRO', BRAZO: 'BRAZO', CODO: 'CODO', ANTEBRAZO: 'ANTEBRAZO', MUNECA: 'MUNECA', MANO: 'MANO', DEDO: 'DEDO',
+    CADERA: 'CADERA', FEMUR: 'FEMUR', MUSLO: 'MUSLO', RODILLA: 'RODILLA', PIERNA: 'PIERNA', TOBILLO: 'TOBILLO', PIE: 'PIE',
+    TIBIA: 'TIBIA', PERONE: 'PERONE', HUMERO: 'HUMERO', CLAVICULA: 'CLAVICULA', ESCAPULA: 'ESCAPULA', COSTILLA: 'COSTILLA', PARRILLA: 'COSTILLA',
+    MAMA: 'MAMA', MAMARIO: 'MAMA', MAMARIA: 'MAMA', SENO: 'MAMA', SENOS: 'MAMA', SENOS_PARANASALES: 'SPN', PARANASAL: 'SPN', PARANASALES: 'SPN',
+    OBSTETRICO: 'OBSTETRICO', OBSTETRICA: 'OBSTETRICO', TRANSVAGINAL: 'TRANSVAGINAL', TESTICULAR: 'TESTICULO', ESCROTAL: 'TESTICULO', PROSTATICO_USG: 'PROSTATA'
+  };
+  var LATERAL = { DERECHO: 'DERECHO', DERECHA: 'DERECHO', IZQUIERDO: 'IZQUIERDO', IZQUIERDA: 'IZQUIERDO', BILATERAL: 'BILATERAL', AMBOS: 'BILATERAL' };
+  var METHOD = { CUALITATIVO: 'CUALITATIVO', CUALITATIVA: 'CUALITATIVO', CUANTITATIVO: 'CUANTITATIVO', CUANTITATIVA: 'CUANTITATIVO', SEMICUANTITATIVO: 'SEMICUANTITATIVO', SEMICUANTITATIVA: 'SEMICUANTITATIVO' };
+  var CONTRAST = { SIMPLE: 'SIMPLE', CONTRASTADO: 'CONTRASTADO', CONTRASTE: 'CONTRASTADO', CONTRASTADA: 'CONTRASTADO' };
+  var FRAC1 = { LIBRE: 'LIBRE', TOTAL: 'TOTAL', TOTALE: 'TOTAL' };
+  var FRAC2 = { DIRECTA: 'DIRECTA', DIRECTO: 'DIRECTA', INDIRECTA: 'INDIRECTA', INDIRECTO: 'INDIRECTA' };
+
+  function toSet(a) { var o = Object.create(null); a.forEach(function (x) { o[x] = 1; }); return o; }
+
+  /* ---------- diccionarios ---------- */
+  function parseDict(text, origin) {
+    var out = [];
+    String(text || '').split(/\r?\n/).forEach(function (line) {
+      var i = line.indexOf('=');
+      if (i < 0) return;
+      var keys = line.slice(0, i), val = line.slice(i + 1).trim();
+      if (!val) return;
+      keys.split('/').forEach(function (k) {
+        k = basic(k);
+        if (k) out.push({ key: k, val: val, origin: origin });
+      });
+    });
+    return out;
+  }
+
+  function buildCtx(abbrText, synText) {
+    var abbr = parseDict(abbrText, 'abbr');
+    var syn = parseDict(synText, 'syn');
+    var abbrMap = Object.create(null), keysOrig = Object.create(null);
+    abbr.forEach(function (e) { abbrMap[e.key] = e.val; keysOrig[e.key] = e.val; });
+    // resuelve expansiones que contienen otras abreviaturas (TRANSAMINASAS = TGO + TGP)
+    Object.keys(abbrMap).forEach(function (k) {
+      var toks = basic(abbrMap[k]).split(' ').filter(Boolean);
+      var res = [];
+      toks.forEach(function (t) {
+        if (abbrMap[t] && t !== k && toks.length > 1 && t.length <= 6) res.push(basic(abbrMap[t]));
+        else res.push(t);
+      });
+      abbrMap[k] = res.join(' ');
+    });
+    var abbrPhrases = Object.keys(abbrMap).map(function (k) {
+      return { from: k.split(' '), to: abbrMap[k].split(' ').filter(Boolean), key: k, raw: keysOrig[k] };
+    }).sort(function (a, b) { return b.from.length - a.from.length; });
+    var synPhrases = syn.map(function (e) {
+      return { from: e.key.split(' '), to: basic(e.val).split(' ').filter(Boolean), key: e.key, raw: e.val };
+    }).filter(function (p) { return p.from.join(' ') !== p.to.join(' '); })
+      .sort(function (a, b) { return b.from.length - a.from.length; });
+    return { abbr: abbrPhrases, syn: synPhrases, usage: Object.create(null) };
+  }
+
+  /* ---------- normalización ---------- */
+  function basic(s) {
+    if (s === null || s === undefined) return '';
+    s = String(s).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    s = s.replace(/[^A-Z0-9]+/g, ' ');
+    return s.replace(/\s+/g, ' ').trim();
+  }
+
+  function preClean(s, flags) {
+    if (s === null || s === undefined) return '';
+    s = String(s).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    // AC. = ANTICUERPOS si sigue ANTI / IgG / IgM / CONTRA; si no, ACIDO
+    s = s.replace(/\bAC\.?\s*(?=(ANTI|IG[GMAE]\b|CONTRA\b))/g, function () { flags.push('AC.→ANTICUERPOS'); return 'ANTICUERPOS '; });
+    s = s.replace(/\bAC\.\s*/g, function () { flags.push('AC.→ACIDO'); return 'ACIDO '; });
+    // Q.S / Q. S. → QS
+    s = s.replace(/\b([A-Z])\.\s?(?=[A-Z](\.|\b))/g, '$1');
+    s = s.replace(/[^A-Z0-9]+/g, ' ');
+    return s.replace(/\s+/g, ' ').trim();
+  }
+
+  function replacePhrases(tokens, phrases, applied, tag) {
+    if (!phrases.length) return tokens;
+    var out = [], i = 0;
+    while (i < tokens.length) {
+      var hit = null;
+      for (var p = 0; p < phrases.length; p++) {
+        var f = phrases[p].from, ok = true;
+        if (i + f.length > tokens.length) continue;
+        for (var j = 0; j < f.length; j++) if (tokens[i + j] !== f[j]) { ok = false; break; }
+        if (ok) { hit = phrases[p]; break; }
+      }
+      if (hit) {
+        var f2 = hit.from, to = hit.to, keep = false;
+        // ¿la frase ya forma parte de su forma completa? (SEDIMENTACION GLOBULAR dentro de VELOCIDAD DE SEDIMENTACION GLOBULAR)
+        for (var o = 0; o + f2.length <= to.length && !keep; o++) {
+          var sub = true;
+          for (var q = 0; q < f2.length; q++) if (to[o + q] !== f2[q]) { sub = false; break; }
+          if (!sub) continue;
+          var st = i - o, full = st >= 0 && st + to.length <= tokens.length;
+          for (q = 0; full && q < to.length; q++) if (tokens[st + q] !== to[q]) full = false;
+          if (full) keep = true;
+        }
+        if (keep) { for (q = 0; q < f2.length; q++) out.push(tokens[i + q]); i += f2.length; continue; }
+        var rest = tokens.slice(0, i).concat(tokens.slice(i + f2.length));
+        // no re-expandir si ya viene escrita completa (ej. "HORMONA LUTEINIZANTE LH")
+        var already = to.length > 1 && (containsSeq(rest, to) || containsSeq(out, to));
+        if (!already) for (var k = 0; k < to.length; k++) out.push(to[k]);
+        applied.push(tag + ':' + hit.key);
+        i += f2.length;
+      } else { out.push(tokens[i]); i++; }
+    }
+    return out;
+  }
+  function containsSeq(arr, seq) {
+    outer: for (var i = 0; i + seq.length <= arr.length; i++) {
+      for (var j = 0; j < seq.length; j++) if (arr[i + j] !== seq[j]) continue outer;
+      return true;
+    }
+    return false;
+  }
+
+  function singular(t) {
+    if (t.length <= 3 || /\d/.test(t)) return t;
+    if (/(SIS|US|SS|IS)$/.test(t)) return t;
+    if (/IONES$/.test(t)) return t.slice(0, -2);
+    if (/[LRNDJ]ES$/.test(t) && t.length > 5) return t.slice(0, -2);
+    if (/CES$/.test(t) && t.length > 5) return t.slice(0, -3) + 'Z';
+    if (/[AEIOU]S$/.test(t)) return t.slice(0, -1);
+    return t;
+  }
+
+  function analyze(raw, ctx) {
+    var flags = [];
+    var base = preClean(raw, flags);
+    var tokens0 = base ? base.split(' ') : [];
+    var appliedA = flags.slice(), appliedS = [];
+    var tExp = replacePhrases(tokens0, ctx.abbr, appliedA, 'A');
+    var tSyn = replacePhrases(tExp, ctx.syn, appliedS, 'S');
+    // versión sin abreviaturas (para distinguir el tipo de coincidencia)
+    var plainSyn = replacePhrases(tokens0, ctx.syn, [], 'S');
+    var canon = finalize(tSyn);
+    var plain = finalize(plainSyn);
+    var bare = finalize(tokens0);
+    return {
+      raw: raw, base: base, tokens: canon.tokens, str: canon.tokens.join(' '),
+      sorted: canon.tokens.slice().sort().join(' '), plainStr: plain.tokens.join(' '), bareStr: bare.tokens.join(' '),
+      attrs: attributes(tSyn, tokens0), appliedA: appliedA, appliedS: appliedS,
+      len: canon.tokens.join(' ').length
+    };
+  }
+
+  function finalize(tokens) {
+    var out = [], seen = Object.create(null);
+    for (var i = 0; i < tokens.length; i++) {
+      var t = singular(tokens[i]);
+      if (STOP[t] || GENERIC[t] || seen[t]) continue;
+      seen[t] = 1;
+      out.push(t);
+    }
+    return { tokens: out };
+  }
+
+  function attributes(tokens, rawTokens) {
+    var a = { sample: Object.create(null), region: Object.create(null), lat: Object.create(null), method: Object.create(null),
+      contrast: Object.create(null), f1: Object.create(null), f2: Object.create(null), ig: Object.create(null), nums: Object.create(null), h24: false };
+    for (var i = 0; i < tokens.length; i++) {
+      var t = tokens[i], s = singular(t);
+      if (SAMPLE[t] || SAMPLE[s]) a.sample[SAMPLE[t] || SAMPLE[s]] = 1;
+      if (REGION[t] || REGION[s]) a.region[REGION[t] || REGION[s]] = 1;
+      if (LATERAL[t]) a.lat[LATERAL[t]] = 1;
+      if (METHOD[t]) a.method[METHOD[t]] = 1;
+      if (CONTRAST[t]) a.contrast[CONTRAST[t]] = 1;
+      if (FRAC1[t] || FRAC1[s]) a.f1[FRAC1[t] || FRAC1[s]] = 1;
+      if (FRAC2[t]) a.f2[FRAC2[t]] = 1;
+      if (t === 'INMUNOGLOBULINA' && /^[GMAE]$/.test(tokens[i + 1] || '')) a.ig[tokens[i + 1]] = 1;
+      if (/^\d+$/.test(t)) a.nums[String(parseInt(t, 10))] = 1;
+      else if (ROMAN[t] && i > 0) a.nums[String(ROMAN[t])] = 1;
+      if (((t === '24' || t === 'VEINTICUATRO') && /^(HORA|HR|HS)/.test(tokens[i + 1] || '')) || /^24(H|HR|HRS|HS)$/.test(t)) a.h24 = true;
+    }
+    // la muestra por defecto en laboratorio es suero/sangre
+    var keys = Object.keys(a.sample);
+    if (keys.length > 1 && a.sample.SUERO) { /* mixto, ej. SUERO U ORINA */ }
+    return a;
+  }
+
+  /* ---------- similitud ---------- */
+  var lvBuf = new Int32Array(512);
+  function lev(a, b) {
+    if (a === b) return 0;
+    var la = a.length, lb = b.length;
+    if (!la) return lb; if (!lb) return la;
+    if (lb + 1 > lvBuf.length) lvBuf = new Int32Array(lb * 2 + 2);
+    var row = lvBuf;
+    for (var j = 0; j <= lb; j++) row[j] = j;
+    for (var i = 1; i <= la; i++) {
+      var prev = row[0]; row[0] = i; var ca = a.charCodeAt(i - 1);
+      for (j = 1; j <= lb; j++) {
+        var tmp = row[j];
+        var cost = ca === b.charCodeAt(j - 1) ? 0 : 1;
+        var v = prev + cost, x = row[j] + 1, y = row[j - 1] + 1;
+        row[j] = v < x ? (v < y ? v : y) : (x < y ? x : y);
+        prev = tmp;
+      }
+    }
+    return row[lb];
+  }
+  function ratio(a, b) {
+    if (!a.length && !b.length) return 100;
+    var t = a.length + b.length;
+    // ratio estilo fuzzywuzzy (indel): sustitución cuenta como 2
+    return Math.round((1 - levIndel(a, b) / t) * 1000) / 10;
+  }
+  function levIndel(a, b) {
+    // distancia con inserciones/borrados (LCS)
+    var la = a.length, lb = b.length;
+    if (!la) return lb; if (!lb) return la;
+    if (lb + 1 > lvBuf.length) lvBuf = new Int32Array(lb * 2 + 2);
+    var row = lvBuf;
+    for (var j = 0; j <= lb; j++) row[j] = 0;
+    for (var i = 1; i <= la; i++) {
+      var prev = 0, ca = a.charCodeAt(i - 1);
+      for (j = 1; j <= lb; j++) {
+        var tmp = row[j];
+        if (ca === b.charCodeAt(j - 1)) row[j] = prev + 1;
+        else if (row[j - 1] > row[j]) row[j] = row[j - 1];
+        prev = tmp;
+      }
+    }
+    return la + lb - 2 * row[lb];
+  }
+  function tokenSet(A, B) {
+    var sa = Object.create(null), sb = Object.create(null), inter = [], da = [], db = [];
+    A.forEach(function (t) { sa[t] = 1; }); B.forEach(function (t) { sb[t] = 1; });
+    Object.keys(sa).forEach(function (t) { if (sb[t]) inter.push(t); else da.push(t); });
+    Object.keys(sb).forEach(function (t) { if (!sa[t]) db.push(t); });
+    inter.sort(); da.sort(); db.sort();
+    var t0 = inter.join(' '), t1 = (t0 + ' ' + da.join(' ')).trim(), t2 = (t0 + ' ' + db.join(' ')).trim();
+    if (!t0) return ratio(t1, t2);
+    return Math.max(ratio(t0, t1), ratio(t0, t2), ratio(t1, t2));
+  }
+  function tokSim(a, b) {
+    if (a === b) return 1;
+    if (Math.abs(a.length - b.length) > 3 || a.length < 4 || b.length < 4) return 0;
+    if (/\d/.test(a) || /\d/.test(b)) return 0;
+    var r = 1 - lev(a, b) / Math.max(a.length, b.length);
+    return r >= 0.8 ? r : 0;
+  }
+  function semantic(A, B, idf) {
+    var wa = 0, wb = 0, m = 0, used = Object.create(null);
+    var ua = uniq(A), ub = uniq(B);
+    ua.forEach(function (t) { wa += idf(t); });
+    ub.forEach(function (t) { wb += idf(t); });
+    ua.forEach(function (t) {
+      var best = 0, bj = -1;
+      for (var j = 0; j < ub.length; j++) {
+        if (used[j]) continue;
+        var s = tokSim(t, ub[j]);
+        if (s > best) { best = s; bj = j; if (s === 1) break; }
+      }
+      if (bj >= 0) { used[bj] = 1; m += best * (idf(t) + idf(ub[bj])) / 2; }
+    });
+    if (!wa || !wb) return 0;
+    return Math.round(2 * m / (wa + wb) * 1000) / 10;
+  }
+  function uniq(a) { var s = Object.create(null), o = []; a.forEach(function (t) { if (!s[t]) { s[t] = 1; o.push(t); } }); return o; }
+
+  /* ---------- criterio clínico ---------- */
+  function cmpGroup(ga, gb, label, hard, soft, softPts) {
+    var ka = Object.keys(ga), kb = Object.keys(gb);
+    if (!ka.length && !kb.length) return;
+    if (ka.length && kb.length) {
+      var same = ka.length === kb.length && ka.every(function (k) { return gb[k]; });
+      if (!same) hard.push(label + ': ' + ka.join('/') + ' vs ' + kb.join('/'));
+      return;
+    }
+    soft.push(label + ': ' + (ka.length ? ka.join('/') + ' vs (no indicado)' : '(no indicado) vs ' + kb.join('/')));
+    return softPts;
+  }
+  function clinical(A, B) {
+    var hard = [], soft = [], pen = 0, x;
+    var a = A.attrs, b = B.attrs;
+    // muestra: ausencia = suero/sangre
+    var sa = Object.keys(a.sample).length ? a.sample : { SUERO: 1 };
+    var sb = Object.keys(b.sample).length ? b.sample : { SUERO: 1 };
+    var ka = Object.keys(sa), kb = Object.keys(sb);
+    var overlap = ka.some(function (k) { return sb[k]; });
+    if (!overlap) hard.push('Tipo de muestra: ' + ka.join('/') + ' vs ' + kb.join('/'));
+    else if (ka.length !== kb.length) { soft.push('Muestra: ' + ka.join('/') + ' vs ' + kb.join('/')); pen += 6; }
+    if ((sa.ORINA || sb.ORINA) && overlap && a.h24 !== b.h24) hard.push('Orina: ' + (a.h24 ? '24 HORAS' : 'SIMPLE') + ' vs ' + (b.h24 ? '24 HORAS' : 'SIMPLE'));
+    if ((x = cmpGroup(a.f1, b.f1, 'Fracción', hard, soft, 7))) pen += x;
+    if ((x = cmpGroup(a.f2, b.f2, 'Fracción', hard, soft, 10))) pen += x;
+    if ((x = cmpGroup(a.ig, b.ig, 'Inmunoglobulina', hard, soft, 10))) pen += x;
+    if ((x = cmpGroup(a.method, b.method, 'Método', hard, soft, 6))) pen += x;
+    if ((x = cmpGroup(a.region, b.region, 'Región anatómica', hard, soft, 8))) pen += x;
+    if ((x = cmpGroup(a.lat, b.lat, 'Lateralidad', hard, soft, 8))) pen += x;
+    if ((x = cmpGroup(a.contrast, b.contrast, 'Contraste', hard, soft, 8))) pen += x;
+    if ((x = cmpGroup(a.nums, b.nums, 'Número', hard, soft, 6))) pen += x;
+    return { hard: hard, soft: soft, pen: pen };
+  }
+
+  /* ---------- índice del catálogo ---------- */
+  function buildIndex(cat) {
+    // cat: [{code, desc, an}]
+    var post = Object.create(null), df = Object.create(null), exact = Object.create(null), N = cat.length;
+    cat.forEach(function (c, i) {
+      uniq(c.an.tokens).forEach(function (t) { (post[t] || (post[t] = [])).push(i); df[t] = (df[t] || 0) + 1; });
+      (exact[c.an.str] || (exact[c.an.str] = [])).push(i);
+    });
+    var vocab = Object.keys(post);
+    var tri = Object.create(null);
+    vocab.forEach(function (t, vi) {
+      if (t.length < 4) return;
+      grams(t).forEach(function (g) { (tri[g] || (tri[g] = [])).push(vi); });
+    });
+    var idfCache = Object.create(null);
+    function idf(t) {
+      var v = idfCache[t];
+      if (v === undefined) { v = Math.log(1 + (N + 1) / ((df[t] || 0) + 0.5)); if (LOWINFO[t] || /^\d+$/.test(t) || ROMAN[t]) v *= 0.4; idfCache[t] = v; }
+      return v;
+    }
+    return { cat: cat, post: post, df: df, exact: exact, vocab: vocab, tri: tri, idf: idf, N: N, fuzzyCache: Object.create(null) };
+  }
+  function grams(t) { var s = ' ' + t + ' ', g = []; for (var i = 0; i < s.length - 2; i++) g.push(s.substr(i, 3)); return uniq(g); }
+
+  function fuzzyVocab(ix, t) {
+    if (ix.fuzzyCache[t]) return ix.fuzzyCache[t];
+    var res = [];
+    if (t.length >= 4 && !/\d/.test(t)) {
+      var cnt = Object.create(null);
+      grams(t).forEach(function (g) { (ix.tri[g] || []).forEach(function (vi) { cnt[vi] = (cnt[vi] || 0) + 1; }); });
+      var gl = grams(t).length;
+      Object.keys(cnt).forEach(function (vi) {
+        if (cnt[vi] < gl * 0.4) return;
+        var v = ix.vocab[vi];
+        if (v !== t && tokSim(t, v) >= 0.8) res.push(v);
+      });
+    }
+    ix.fuzzyCache[t] = res;
+    return res;
+  }
+
+  function scorePair(A, B, ix) {
+    var lv = ratio(A.str, B.str);
+    var so = ratio(A.sorted, B.sorted);
+    var se = tokenSet(A.tokens, B.tokens);
+    var sm = semantic(A.tokens, B.tokens, ix.idf);
+    var s = 0.15 * lv + 0.20 * so + 0.25 * se + 0.40 * sm;
+    // analito principal (primer término) sin equivalente en ninguno de los dos lados
+    var ha = A.tokens[0], hb = B.tokens[0], head = 0;
+    if (ha && hb && !B.tokens.some(function (t) { return tokSim(ha, t); }) && !A.tokens.some(function (t) { return tokSim(hb, t); })) { s -= 12; head = 1; }
+    return { lev: lv, sort: so, set: se, sem: sm, base: s, head: head };
+  }
+
+  function matchOne(A, ix, opts) {
+    opts = opts || {};
+    var K = opts.k || 30, cat = ix.cat;
+    if (!A.tokens.length) return { cands: [] };
+    if (!ix.acc || ix.acc.length !== ix.N) { ix.acc = new Float64Array(ix.N); }
+    var acc = ix.acc, touched = [];
+    var cap = Math.max(200, ix.N * 0.08);
+    var srcs = [];
+    uniq(A.tokens).forEach(function (t) {
+      var list = ix.post[t];
+      if (list) srcs.push([list, ix.idf(t)]);
+      else fuzzyVocab(ix, t).forEach(function (v) { srcs.push([ix.post[v], ix.idf(v) * 0.85]); });
+    });
+    // si todos los términos son comunes, usa sólo los más raros
+    srcs.sort(function (a, b) { return a[0].length - b[0].length; });
+    srcs.forEach(function (pair, si) {
+      var L = pair[0], w = pair[1];
+      if (L.length > cap && si > 0) return;
+      for (var i = 0; i < L.length; i++) { var d = L[i]; if (acc[d] === 0) touched.push(d); acc[d] += w; }
+    });
+    (ix.exact[A.str] || []).forEach(function (d) { if (acc[d] === 0) touched.push(d); acc[d] += 1e6; });
+    var ids;
+    if (touched.length <= K) ids = touched.slice();
+    else {
+      // umbral aproximado para seleccionar los K mejores sin ordenar todo
+      var top = [];
+      for (var i2 = 0; i2 < touched.length; i2++) {
+        var v = acc[touched[i2]];
+        if (top.length < K) { top.push(touched[i2]); if (top.length === K) top.sort(function (a, b) { return acc[a] - acc[b]; }); }
+        else if (v > acc[top[0]]) {
+          top[0] = touched[i2];
+          for (var z = 0; z < K - 1 && acc[top[z]] > acc[top[z + 1]]; z++) { var tmp = top[z]; top[z] = top[z + 1]; top[z + 1] = tmp; }
+        }
+      }
+      ids = top;
+    }
+    ids.sort(function (a, b) { return acc[b] - acc[a]; });
+    var prior = ids.map(function (d) { return acc[d]; });
+    for (var r = 0; r < touched.length; r++) acc[touched[r]] = 0;
+    if (ids.length > 12) {
+      var semS = ids.map(function (d) { return [d, semantic(A.tokens, cat[d].an.tokens, ix.idf) + (A.str === cat[d].an.str ? 1000 : 0)]; });
+      semS.sort(function (a, b) { return b[1] - a[1]; });
+      ids = semS.slice(0, 12).map(function (x) { return x[0]; });
+    }
+    var cands = ids.map(function (id) {
+      var B = cat[id].an;
+      var sc = scorePair(A, B, ix);
+      var cl = clinical(A, B);
+      var exact = A.str === B.str && A.str.length > 0;
+      var type, score;
+      if (exact) {
+        if (A.bareStr === B.bareStr) { score = 100; type = A.base === B.base ? 'Exacta' : 'Ortografía/plural'; }
+        else if (A.plainStr === B.plainStr) { score = 96; type = 'Sinónimo clínico'; }
+        else { score = 98; type = 'Abreviatura'; }
+        if (cl.soft.length) score = Math.min(score, 94);
+      } else {
+        score = Math.min(99, sc.base) - cl.pen;
+        type = 'Similitud textual';
+        var anyA = A.appliedA.length || B.appliedA.length, anyS = A.appliedS.length || B.appliedS.length;
+        if (anyA && ratio(A.plainStr, B.plainStr) + 8 < sc.lev) type = 'Abreviatura';
+        else if (anyS) type = 'Sinónimo clínico';
+        else if (A.tokens.length === B.tokens.length && sc.lev >= 88) type = 'Ortografía/plural';
+      }
+      var rawScore = score;
+      if (cl.hard.length) score = Math.min(score, 69);
+      score = Math.max(0, Math.round(score * 10) / 10);
+      return { idx: +id, score: score, rawScore: rawScore, type: type, sc: sc, cl: cl };
+    });
+    cands.sort(function (a, b) { return b.score - a.score || b.rawScore - a.rawScore; });
+    return { cands: cands };
+  }
+
+  function levelOf(s) {
+    if (s >= 100) return 'Coincidencia exacta';
+    if (s >= 90) return 'Muy probable';
+    if (s >= 80) return 'Posible';
+    if (s >= 70) return 'Revisar manualmente';
+    return 'Sin coincidencia';
+  }
+  function levelKey(s) { return s >= 90 ? 'g' : s >= 80 ? 'b' : s >= 70 ? 'y' : 'r'; }
+
+  function justify(A, best, alt, cat, doubt) {
+    if (!best) return 'Ningún término clave del origen aparece en el catálogo.';
+    var B = cat[best.idx].an, parts = [];
+    var sh = shared(A.tokens, B.tokens);
+    if (best.score >= 100) parts.push('Idénticas después de normalizar' + (best.type === 'Ortografía/plural' ? ' (acentos, signos o plurales).' : '.'));
+    else if (best.score >= 96 && best.type === 'Abreviatura') parts.push('Coinciden al expandir abreviaturas (' + listApplied(A, B, 'A') + ').');
+    else if (best.score >= 96 && best.type === 'Sinónimo clínico') parts.push('Coinciden por sinónimo clínico (' + listApplied(A, B, 'S') + ').');
+    else if (best.score >= 70) {
+      parts.push('Comparten ' + sh.common.length + ' de ' + Math.max(uniq(A.tokens).length, uniq(B.tokens).length) + ' términos clave' + (sh.common.length ? ' (' + sh.common.slice(0, 4).join(', ') + ')' : '') + '.');
+      var diff = sh.onlyA.concat(sh.onlyB.map(function (t) { return '+' + t; }));
+      if (diff.length) parts.push('Difieren en: ' + diff.slice(0, 4).join(', ') + '.');
+    }
+    if (best.cl.hard.length) parts.push('Descartado por diferencia clínica: ' + best.cl.hard.join('; ') + '.');
+    else if (best.cl.soft.length && best.score < 100) parts.push('Atención: ' + best.cl.soft.join('; ') + '.');
+    if (doubt) parts.push('Duda: la alternativa ' + cat[alt.idx].code + ' tiene un puntaje casi igual (' + alt.score + '%).');
+    if (best.score < 70 && !best.cl.hard.length) parts.push('El candidato más cercano (' + best.score + '%) no alcanza el 70%.');
+    return parts.join(' ');
+  }
+  function listApplied(A, B, tag) {
+    var s = Object.create(null);
+    A.appliedA.concat(A.appliedS, B.appliedA, B.appliedS).forEach(function (x) { if (x.indexOf(tag + ':') === 0 || (tag === 'A' && x.indexOf('AC.') === 0)) s[x.replace(/^[AS]:/, '')] = 1; });
+    return Object.keys(s).slice(0, 4).join(', ') || 'diccionario';
+  }
+  function shared(a, b) {
+    var sb = Object.create(null), sa = Object.create(null);
+    b.forEach(function (t) { sb[t] = 1; }); a.forEach(function (t) { sa[t] = 1; });
+    return { common: uniq(a.filter(function (t) { return sb[t]; })), onlyA: uniq(a.filter(function (t) { return !sb[t]; })), onlyB: uniq(b.filter(function (t) { return !sa[t]; })) };
+  }
+
+  /* ---------- abreviaturas detectadas en archivos ---------- */
+  var COMMON_SHORT = toSet('Y DE DEL LA EL LOS LAS EN CON SIN POR PARA AL UNA UN U O A E RH PIE MANO OJO OIDO CODO DEDO PIEL PELO HORA HORAS DIA DIAS MES ORAL GRAM VIH UREA ACIDO LITIO ZINC COBRE HIERRO FIERRO CALCIO SODIO CLORO PLOMO IGG IGM IGA IGE TOTAL LIBRE SIMPLE DOBLE ALTA BAJA AUX SALA CAMA KIT SET PAQ'.split(' '));
+  function detectAbbr(rows, ctx) {
+    var known = Object.create(null);
+    ctx.abbr.forEach(function (p) { known[p.key] = 1; });
+    var cnt = Object.create(null), ex = Object.create(null);
+    rows.forEach(function (r) {
+      r.an.base.split(' ').forEach(function (t) {
+        if (!/^[A-Z][A-Z0-9]{1,5}$/.test(t)) return;
+        if (known[t] || COMMON_SHORT[t] || ROMAN[t]) return;
+        var vowels = (t.match(/[AEIOU]/g) || []).length;
+        if (vowels > 1 && t.length > 3 && !/\d/.test(t)) return;
+        if (/^\d+$/.test(t)) return;
+        cnt[t] = (cnt[t] || 0) + 1;
+        if (!ex[t]) ex[t] = r.desc;
+      });
+    });
+    return Object.keys(cnt).sort(function (a, b) { return cnt[b] - cnt[a]; }).map(function (t) { return { key: t, count: cnt[t], example: ex[t] }; });
+  }
+
+  return {
+    DEFAULT_ABBR: DEFAULT_ABBR, EXTRA_ABBR: EXTRA_ABBR, DEFAULT_SYN: DEFAULT_SYN,
+    buildCtx: buildCtx, analyze: analyze, buildIndex: buildIndex, matchOne: matchOne,
+    levelOf: levelOf, levelKey: levelKey, justify: justify, detectAbbr: detectAbbr, basic: basic, parseDict: parseDict,
+    clinical: clinical
+  };
+})();
+if (typeof module !== 'undefined') module.exports = HOMO;
+
+// =====================================================================
+// CORE — lógica sin acceso a pantalla ni red (se prueba aparte en Node).
+// =====================================================================
+
+// Umbrales. Son estimados: ajústalos después de revisar una corrida real.
+const UMBRALES = {
+  AUTO: 0.80,                 // confianza mínima (coincidencia de texto) para marcar verde; por debajo, revisión humana
+  EMPATE: 0.001,              // diferencia máxima para considerar dos candidatos empatados
+  MIN_SUGERENCIA_LEXICO: 0.30 // por debajo de esto, la sugerencia de texto es muy débil
+};
+
+function limpiarEspacios(s) {
+  return (s ?? '').toString().replace(/\s+/g, ' ').trim();
+}
+function normalizarTexto(s) {
+  return limpiarEspacios(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+// ---- Coincidencia de texto: trigramas por palabra, igual que pg_trgm de PostgreSQL (0 a 1) ----
+function trigramas(s) {
+  const set = new Set();
+  const palabras = normalizarTexto(s).replace(/ª/g, 'a').replace(/º/g, 'o')            // como unaccent de PostgreSQL
+    .replace(/[^\p{L}\p{N}]+/gu, ' ').trim().split(' ').filter(Boolean);                    // letras y números, de cualquier idioma
+  for (const p of palabras) {
+    const x = '  ' + p + ' ';
+    for (let i = 0; i + 3 <= x.length; i++) set.add(x.slice(i, i + 3));
+  }
+  return set;
+}
+function similitudTexto(a, b) {
+  const A = trigramas(a), B = trigramas(b);
+  if (!A.size || !B.size) return 0;
+  let comunes = 0;
+  A.forEach(t => { if (B.has(t)) comunes++; });
+  return comunes / (A.size + B.size - comunes);
+}
+
+// ---- Palabras que cambian el significado del servicio: si difieren, NUNCA es verde aunque el texto se parezca ----
+const PALABRAS_CRITICAS = new Set(['con', 'sin', 'contraste', 'simple', 'doble', 'bilateral', 'unilateral', 'derecho', 'derecha',
+  'izquierdo', 'izquierda', 'pediatrico', 'pediatrica', 'adulto', 'adulta', 'neonatal', 'menor', 'menores', 'mayor', 'mayores',
+  'aguda', 'agudo', 'cronica', 'cronico', 'total', 'parcial', 'urgencia', 'urgente', 'programado', 'diurno', 'nocturno']);
+function palabrasCriticas(s) {
+  const t = normalizarTexto(s).replace(/\bc\s*\//g, ' con ').replace(/\bs\s*\//g, ' sin ')   // C/ = con, S/ = sin
+    .replace(/[^a-z0-9]+/g, ' ').split(' ').filter(Boolean);
+  const set = new Set();
+  t.forEach(w => { if (PALABRAS_CRITICAS.has(w) || /\d/.test(w)) set.add(w); });             // los números también cuentan
+  return set;
+}
+function diferenciasCriticas(textoProveedor, descCandidato) {
+  const A = palabrasCriticas(textoProveedor), B = palabrasCriticas(descCandidato);
+  const dif = [];
+  A.forEach(w => { if (!B.has(w)) dif.push(w); });
+  B.forEach(w => { if (!A.has(w)) dif.push(w); });
+  return dif.map(w => w.toUpperCase());
+}
+
+function esHabilitado(estatus) {
+  return normalizarTexto(estatus) === 'habilitado';
+}
+function esDeshabilitado(estatus) {
+  return /deshabilit|inhabilit|inactiv|baja/.test(normalizarTexto(estatus));
+}
+function indiceALetra(i) {
+  let n = i + 1, s = '';
+  while (n > 0) { const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); }
+  return s;
+}
+function letraAIndice(letra) {
+  let n = 0;
+  for (const ch of letra) n = n * 26 + (ch.charCodeAt(0) - 64);
+  return n - 1;
+}
+
+// ---------------------------------------------------------------------
+// Lectura de la estructura del archivo (usa SheetJS, que se le pasa como parámetro)
+// ---------------------------------------------------------------------
+// FORMATO BI (estándar del área): un solo formato, siempre el mismo.
+//   A-C  CALLMED   -> son lo ÚNICO que el sistema llena
+//   D-J  proveedor -> no se tocan nunca (K = NOTA es opcional y tampoco se toca)
+// Los encabezados deben estar en la fila 1 y decir exactamente esto (sin importar mayúsculas, acentos ni espacios).
+const FORMATO_BI = {
+  filaEncabezado: 1,
+  columnas: [
+    { letra: 'A', clave: 'codigocallmed',      nombre: 'CODIGO CALLMED' },
+    { letra: 'B', clave: 'descripcioncallmed', nombre: 'DESCRIPCION CALLMED' },
+    { letra: 'C', clave: 'tipodeservicio',     nombre: 'TIPO DE SERVICIO' },
+    { letra: 'D', clave: 'codigoproveedor',    nombre: 'CODIGO PROVEEDOR' },
+    { letra: 'E', clave: 'descripcion',        nombre: 'DESCRIPCIÓN' },
+    { letra: 'F', clave: 'preciopublico',      nombre: 'PRECIO PUBLICO' },
+    { letra: 'G', clave: '%descuento',         nombre: '% DESCUENTO' },
+    { letra: 'H', clave: 'subtotal',           nombre: 'SUB TOTAL' },
+    { letra: 'I', clave: 'iva',                nombre: 'IVA' },
+    { letra: 'J', clave: 'total',              nombre: 'TOTAL' },
+  ],
+  opcional: { letra: 'K', clave: 'nota', nombre: 'NOTA' },
+};
+function claveEncabezado(s) { return normalizarTexto(s).replace(/[^a-z0-9%]/g, ''); }
+
+function detectarEstructura(XLSXlib, ws) {
+  const avisos = [];
+  if (!ws || !ws['!ref']) throw new Error('La hoja está vacía.');
+  const rango = XLSXlib.utils.decode_range(ws['!ref']);
+  const texto = (r, c) => {
+    const celda = ws[XLSXlib.utils.encode_cell({ r, c })];
+    return celda && celda.v !== undefined && celda.v !== null ? celda.v.toString() : '';
+  };
+
+  // 1) ¿Es el formato BI? Encabezados exactos en A a J (K = NOTA, opcional).
+  const filaEnc = FORMATO_BI.filaEncabezado - 1;
+  const problemas = [];
+  FORMATO_BI.columnas.forEach((col, i) => {
+    const hallado = limpiarEspacios(texto(filaEnc, i));
+    if (claveEncabezado(hallado) !== col.clave) {
+      problemas.push(`Columna ${col.letra}: debe decir "${col.nombre}" y ${hallado ? 'dice "' + hallado + '"' : 'está vacía'}.`);
+    }
+  });
+  const nota = limpiarEspacios(texto(filaEnc, 10));
+  if (nota && claveEncabezado(nota) !== FORMATO_BI.opcional.clave) {
+    problemas.push(`Columna K: si existe debe decir "NOTA" y dice "${nota}".`);
+  }
+  if (problemas.length) {
+    const e = new Error('El archivo no tiene el formato BI estándar. No se tocó nada.');
+    e.problemas = problemas;
+    throw e;
+  }
+  const extra = [];
+  for (let c = 11; c <= rango.e.c; c++) if (limpiarEspacios(texto(filaEnc, c))) extra.push(indiceALetra(c));
+  if (extra.length) avisos.push(`Hay columnas extra (${extra.join(', ')}) después de NOTA; no se tocan.`);
+
+  // 2) Renglones: se procesan los que tienen descripción del proveedor Y las columnas A-C vacías.
+  //    Si A, B o C ya traen algo, ese renglón NO se toca (podría ser trabajo de una persona).
+  const filas = [], yaLlenas = [];
+  let sinDescripcion = 0;
+  for (let r = filaEnc + 1; r <= rango.e.r; r++) {
+    const t = limpiarEspacios(texto(r, 4));
+    if (!t) {
+      if ([3, 5, 6, 7, 8, 9].some(c => limpiarEspacios(texto(r, c)) !== '')) sinDescripcion++;
+      continue;
+    }
+    const previo = [0, 1, 2].some(c => limpiarEspacios(texto(r, c)) !== '');
+    (previo ? yaLlenas : filas).push({ fila: r + 1, texto: t }); // número de fila tal como se ve en Excel
+  }
+  if (sinDescripcion) avisos.push(`${sinDescripcion} renglón(es) traen datos del proveedor pero no descripción: no se procesan.`);
+
+  return { filaEncabezado: filaEnc, colDescripcion: 4, letras: { a: 'A', b: 'B', c: 'C' }, filas, yaLlenas, avisos };
+}
+
+
+// ---------------------------------------------------------------------
+// Decisión de los motores
+// ---------------------------------------------------------------------
+// filas: resultados de buscar_similar, ya ordenados por score descendente.
+function evaluarLexico(filas) {
+  if (!filas || !filas.length) return null;
+  const top = filas[0];
+  const topScore = Number(top.score);
+  const empatados = filas.filter(f => topScore - Number(f.score) <= UMBRALES.EMPATE);
+  const habilitados = empatados.filter(f => esHabilitado(f.estatus));
+  let candidato, ambiguo;
+  if (empatados.length === 1) { candidato = top; ambiguo = false; }
+  else if (habilitados.length === 1) { candidato = habilitados[0]; ambiguo = false; }
+  else { candidato = habilitados[0] || top; ambiguo = true; }
+  return {
+    candidato,
+    score: topScore,
+    ambiguo,
+    empatados: empatados.length,
+    deshabilitado: esDeshabilitado(candidato.estatus),
+  };
+}
+
+// Junta candidatos de ambos motores sin repetir, y sin llenar la lista con copias del mismo texto.
+function juntarCandidatos(lexFilas, semFilas, max = 6) {
+  const salida = [];
+  const vistosCpt = new Set();
+  const porTexto = new Map();
+  const agregar = f => {
+    if (!f || vistosCpt.has(f.cpt) || salida.length >= max) return;
+    const k = normalizarTexto(f.descripcion);
+    if ((porTexto.get(k) || 0) >= 2) return;
+    vistosCpt.add(f.cpt);
+    porTexto.set(k, (porTexto.get(k) || 0) + 1);
+    salida.push(f);
+  };
+  const lex = [...(lexFilas || [])].sort((x, y) => (esHabilitado(y.estatus) ? 1 : 0) - (esHabilitado(x.estatus) ? 1 : 0));
+  lex.slice(0, 4).forEach(agregar);
+  (semFilas || []).forEach(agregar);
+  return salida;
+}
+
+function armarPrompt(descripcion, candidatos) {
+  const lista = candidatos.map((c, i) =>
+    `${i + 1}. [${c.cpt}] ${c.descripcion} (${c.tipo_de_servicio ?? 'sin tipo'}${c.estatus ? ', ' + c.estatus : ''})`
+  ).join('\n');
+  return `Eres un experto en homologar descripciones de servicios médicos de un proveedor contra un catálogo maestro.
+
+Descripción del proveedor: "${descripcion}"
+
+Candidatos del catálogo:
+${lista}
+
+Elige el NÚMERO del candidato que corresponde al mismo servicio. Responde 0 si ninguno corresponde (por ejemplo un concepto administrativo, una tarifa, o un servicio distinto). Si varios candidatos tienen la misma descripción, prefiere el que esté Habilitado.
+Responde ÚNICAMENTE con un JSON exacto: {"eleccion": <número>, "razon": "<máximo 20 palabras en español>"}`;
+}
+
+function interpretarRespuestaIA(texto, nCandidatos) {
+  let obj = null;
+  try { obj = JSON.parse(texto); }
+  catch {
+    // Algunos modelos envuelven el JSON en texto o en ```json ... ```: se toma el primer objeto { ... }
+    const m = String(texto).match(/\{[\s\S]*\}/);
+    try { obj = m ? JSON.parse(m[0]) : null; } catch { obj = null; }
+  }
+  if (!obj) throw new Error('La IA no respondió en el formato esperado');
+  const eleccion = Number(obj.eleccion);
+  if (!Number.isInteger(eleccion) || eleccion < 0 || eleccion > nCandidatos) {
+    throw new Error('La IA eligió un candidato que no existe');
+  }
+  return { eleccion, razon: limpiarEspacios(obj.razon || '') };
+}
+
+function elegirMejorSugerencia(ev, semTop) {
+  if (ev && ev.score >= UMBRALES.MIN_SUGERENCIA_LEXICO) return { cand: ev.candidato, metodo: 'Motor 2 · sugerencia de texto' };
+  if (semTop) return { cand: semTop, metodo: 'Motor 3 · sugerencia por significado' };
+  if (ev) return { cand: ev.candidato, metodo: 'Motor 2 · sugerencia débil' };
+  return null;
+}
+
+// deps = { rpc(nombre, args) -> filas, embedding(texto) -> vector, preguntarIA(prompt) -> texto JSON }
+async function homologarFila(deps, textoOriginal, opciones = {}) {
+  const texto = limpiarEspacios(textoOriginal);
+  const notas = [];
+  const pistas = [];
+  const clin = deps.clinico || null;     // Motor 2B (opcional): diccionario y criterio clínico. Sin él todo funciona exactamente como antes
+  const etapas = [];                     // etapas por las que pasó el renglón (solo se muestran con el Motor 2B)
+  let ev = null, semTop = null, lexFilas = [], semFilas = [], extraDic = [], clinMarcado = false, vetoCpt = null;
+  const marcarClin = () => { if (clin && !clinMarcado) { clinMarcado = true; etapas.push('Diccionario y criterio clínico'); } };
+  const umbralPct = () => Math.round(UMBRALES.AUTO * 100);
+  // Coincidencia de texto del código asignado: la que ya calculó la base si es el mejor candidato de texto; si no, se calcula igual
+  const pctDe = cand => {
+    if (!cand) return null;
+    if (ev && ev.candidato && cand.cpt === ev.candidato.cpt) return Math.round(ev.score * 100);
+    return Math.round(similitudTexto(texto, cand.descripcion) * 100);
+  };
+  // Las demás opciones que se consideraron, de mayor a menor parecido de texto (sirven si el código principal ya lo usa otro renglón)
+  const alternativas = () => {
+    const vistos = new Set(), lista = [];
+    [...lexFilas, ...extraDic, ...semFilas].forEach(c => {
+      if (!c || vistos.has(c.cpt)) return;
+      vistos.add(c.cpt);
+      lista.push({ cpt: c.cpt, descripcion: c.descripcion, tipo_de_servicio: c.tipo_de_servicio ?? null, estatus: c.estatus ?? null, pct: pctDe(c) });
+    });
+    return lista.sort((a, b) => b.pct - a.pct);
+  };
+  const salida = (estado, cand, metodo, extra = {}) => ({
+    estado, metodo, notas, pistas, alternativas: alternativas(),
+    ...(clin ? { etapas: [...etapas] } : {}),
+    cpt: cand ? cand.cpt : null,
+    descripcion: cand ? cand.descripcion : null,
+    tipo: cand ? (cand.tipo_de_servicio ?? null) : null,
+    textoPct: cand ? pctDe(cand) : null,
+    ...extra,
+  });
+  // Un renglón que queda en revisión: se dice POR QUÉ (texto bajo el mínimo, diferencias importantes...)
+  const revisar = (cand, metodo, extra = {}) => {
+    const pct = pctDe(cand);
+    if (pct < umbralPct()) notas.push(`Coincidencia de texto ${pct}% (mínimo ${umbralPct()}%)`);
+    const d = diferenciasCriticas(texto, cand.descripcion);
+    if (d.length) notas.push(`Difieren en: ${d.join(', ')}`);
+    if (clin) {
+      const cl = clin.evaluar(texto, cand.descripcion);
+      if (cl.hard.length && cand.cpt !== vetoCpt) notas.push(`Criterio clínico: ${cl.hard.join('; ')}`);   // si es el código que se frenó, ya quedó escrito arriba
+      const pctDic = Math.round(similitudTexto(clin.normal(texto), clin.normal(cand.descripcion)) * 100);
+      if (pctDic >= pct + 10) pistas.push(`Con el diccionario clínico el parecido sube a ${pctDic}%`);
+    }
+    if (semTop && semTop.cpt === cand.cpt) pistas.push('El significado (Motor 3) también apunta a este código');
+    return salida('revisar', cand, metodo, extra);
+  };
+
+  // Motor 1 · alias confirmados (solo lectura)
+  if (deps.aliasDisponible !== false) {
+    etapas.push('Alias');
+    try {
+      const r = await deps.rpc('buscar_alias', { termino: texto });
+      if (r && r.length) return salida('auto', r[0], 'Motor 1 · alias confirmado', { textoPct: 100 });
+    } catch (e) { deps.aliasDisponible = false; }
+  }
+
+  // Motor 2 · texto: verde SOLO si llega al mínimo, es único, está habilitado y no difiere en nada importante
+  etapas.push('Texto');
+  try { lexFilas = (await deps.rpc('buscar_similar', { termino: texto, limite: 6 })) || []; }
+  catch (e) { notas.push('Motor 2 falló: ' + e.message); }
+  ev = evaluarLexico(lexFilas);
+  const difsLex = ev ? diferenciasCriticas(texto, ev.candidato.descripcion) : [];
+  if (ev && !ev.ambiguo && !ev.deshabilitado && ev.score >= UMBRALES.AUTO && !difsLex.length) {
+    // Motor 2B · criterio clínico: una diferencia dura (muestra, región, fracción, método, contraste, número...) impide el verde
+    marcarClin();
+    const cl = clin ? clin.evaluar(texto, ev.candidato.descripcion) : null;
+    if (!cl || !cl.hard.length) return salida('auto', ev.candidato, `Motor 2 · texto muy parecido (${Math.round(ev.score * 100)}%)`);
+    vetoCpt = ev.candidato.cpt;       // siempre queda escrito por qué no salió verde, aunque después se proponga otro código
+    notas.push(`Criterio clínico: ${cl.hard.join('; ')} (por eso ${ev.candidato.cpt} no salió verde)`);
+  }
+  if (ev && ev.ambiguo) notas.push(`Hay ${ev.empatados} códigos con el mismo texto`);
+  if (ev && ev.deshabilitado) notas.push('El servicio aparece deshabilitado en el catálogo');
+
+  // Motor 2B · diccionario clínico: si el texto trae abreviaturas o sinónimos, se busca TAMBIÉN con el texto ya expandido.
+  // Solo aporta candidatos: nunca sube un renglón a verde.
+  if (clin) {
+    marcarClin();
+    const exp = clin.expandir(texto);
+    if (exp) {
+      try {
+        const extra = (await deps.rpc('buscar_similar', { termino: exp, limite: 6 })) || [];
+        extraDic = extra;     // todo lo que devolvió la búsqueda con el texto expandido (aunque ya estuviera entre los de texto simple, el diccionario lo favorece)
+      } catch (e) { notas.push('Diccionario clínico: la búsqueda adicional no estuvo disponible: ' + e.message); }
+    }
+  }
+
+  // Motor 3 · significado (solo orienta: ya no puede subir un renglón a verde por debajo del mínimo)
+  if (opciones.usarSemantico !== false) {
+    etapas.push('Significado');
+    try {
+      const emb = await deps.embedding(texto);
+      semFilas = (await deps.rpc('buscar_semantico', { consulta: emb, limite: 3 })) || [];
+    } catch (e) { notas.push('Motor 3 no disponible: ' + e.message); }
+  }
+  semTop = semFilas[0] || null;
+
+  // Motor 4 · IA decide entre los candidatos (su decisión siempre la confirma una persona)
+  const yaEnTexto = new Set(lexFilas.map(f => f.cpt));
+  const extraNuevos = extraDic.filter(f => !yaEnTexto.has(f.cpt));
+  const lexUnion = extraNuevos.length ? [...lexFilas.slice(0, 3), ...extraNuevos.slice(0, 2), ...lexFilas.slice(3)] : lexFilas;   // los del diccionario que faltaban también entran a la lista
+  const candidatos = juntarCandidatos(lexUnion, semFilas, 6);
+  if (opciones.usarIA && candidatos.length) {
+    etapas.push('IA');
+    try {
+      const resp = await deps.preguntarIA(armarPrompt(texto, candidatos));
+      const { eleccion, razon } = interpretarRespuestaIA(resp, candidatos.length);
+      if (eleccion > 0) return revisar(candidatos[eleccion - 1], 'Motor 4 · IA', { razon });
+      return salida('sin', null, 'Motor 4 · IA', { razon });
+    } catch (e) { notas.push('Motor 4 no respondió: ' + e.message); }
+  }
+
+  let mejor = elegirMejorSugerencia(ev, semTop);
+  // Motor 2B: sin IA, lo mejor por texto CON diccionario puede superar con holgura a lo mejor por texto simple
+  if (clin && extraDic.length) {
+    const pt = clin.normal(texto);
+    let mejorDic = null;
+    extraDic.forEach(c => {
+      const p = Math.round(similitudTexto(pt, clin.normal(c.descripcion)) * 100);
+      if (esHabilitado(c.estatus) && (!mejorDic || p > mejorDic.p)) mejorDic = { c, p };
+    });
+    if (mejorDic && mejorDic.p >= 60 && (!mejor || mejorDic.p >= pctDe(mejor.cand) + 20)) {
+      mejor = { cand: mejorDic.c, metodo: 'Motor 2B · sugerencia con diccionario clínico' };
+    }
+  }
+  if (!mejor) return salida('sin', null, 'Sin candidatos');
+  return revisar(mejor.cand, mejor.metodo);
+}
+
+
+// ---------------------------------------------------------------------
+// Edición del .xlsx por dentro: solo se escriben las celdas de A, B y C.
+// El resto de las celdas (precios, códigos, encabezados) no se vuelve a escribir.
+// ---------------------------------------------------------------------
+function escaparXml(s) {
+  return (s ?? '').toString()
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function atributosDe(etiqueta) {
+  const o = {};
+  for (const m of etiqueta.matchAll(/([\w:]+)="([^"]*)"/g)) o[m[1]] = m[2];
+  return o;
+}
+
+function rutaHojaPrincipal(workbookXml, relsXml) {
+  const hoja = workbookXml.match(/<sheet\b[^>]*>/);
+  if (!hoja) throw new Error('El archivo no tiene hojas.');
+  const rid = atributosDe(hoja[0])['r:id'];
+  const rel = [...relsXml.matchAll(/<Relationship\b[^>]*>/g)].map(m => atributosDe(m[0])).find(a => a.Id === rid);
+  if (!rel) throw new Error('No encontré la ruta de la primera hoja.');
+  const destino = rel.Target;
+  return destino.startsWith('/') ? destino.slice(1) : 'xl/' + destino;
+}
+
+const COLORES = { auto: 'FFD9EAD3', revisar: 'FFFFF2CC', sin: 'FFF4CCCC' };
+
+// Agrega tres rellenos (verde, ámbar, rojo) y sus estilos; devuelve ids para usarlos en las celdas.
+function agregarEstilos(xmlEstilos) {
+  const mf = xmlEstilos.match(/<fills\b[^>]*\bcount="(\d+)"[^>]*>/);
+  const mx = xmlEstilos.match(/<cellXfs\b[^>]*\bcount="(\d+)"[^>]*>/);
+  if (!mf || !mx) throw new Error('No pude leer los estilos del archivo.');
+  const nFills = Number(mf[1]), nXfs = Number(mx[1]);
+  const orden = ['auto', 'revisar', 'sin'];
+
+  const fills = orden.map(k =>
+    `<fill><patternFill patternType="solid"><fgColor rgb="${COLORES[k]}"/><bgColor indexed="64"/></patternFill></fill>`).join('');
+  const xfs = orden.map((k, i) =>
+    `<xf numFmtId="0" fontId="0" fillId="${nFills + i}" borderId="0" xfId="0" applyFill="1"/>`).join('');
+
+  let xml = xmlEstilos;
+  xml = xml.replace(mf[0], mf[0].replace(`count="${nFills}"`, `count="${nFills + 3}"`));
+  xml = xml.replace('</fills>', fills + '</fills>');
+  xml = xml.replace(mx[0], mx[0].replace(`count="${nXfs}"`, `count="${nXfs + 3}"`));
+  xml = xml.replace('</cellXfs>', xfs + '</cellXfs>');
+  return { xml, ids: { auto: nXfs, revisar: nXfs + 1, sin: nXfs + 2 } };
+}
+
+// mapa: { [filaExcel]: { estado, cpt, descripcion, tipo } }
+function aplicarResultadosAlXml(xmlHoja, mapa, letras, estilosIds) {
+  const cols = [letras.a, letras.b, letras.c];
+  const minCol = Math.min(...cols.map(l => letraAIndice(l) + 1));
+  const patron = /<row\b[^>]*\/>|<row\b[^>]*[^\/]>[\s\S]*?<\/row>/g;
+
+  return xmlHoja.replace(patron, bloque => {
+    if (!bloque.includes('</row>')) return bloque; // fila vacía autocerrada
+    const apertura = bloque.match(/^<row\b[^>]*>/)[0];
+    const fila = (apertura.match(/\sr="(\d+)"/) || [])[1];
+    const res = fila ? mapa[fila] : null;
+    if (!res) return bloque;
+
+    const interior = bloque.slice(apertura.length, bloque.length - '</row>'.length);
+    const quitar = new RegExp('<c\\b[^>]*?\\sr="(?:' + cols.join('|') + ')' + fila + '"[^>]*?(?:\\/>|>[\\s\\S]*?<\\/c>)', 'g');
+    const resto = interior.replace(quitar, '');
+
+    const s = estilosIds[res.estado];
+    const valores = [res.cpt, res.descripcion, res.tipo];
+    const nuevas = cols.map((letra, i) => {
+      const v = valores[i];
+      if (v === null || v === undefined || v === '') return `<c r="${letra}${fila}" s="${s}"/>`;
+      return `<c r="${letra}${fila}" s="${s}" t="inlineStr"><is><t xml:space="preserve">${escaparXml(v)}</t></is></c>`;
+    });
+    // Las celdas deben ir en orden de columna; A, B y C van antes de D en este formato.
+    const ordenadas = cols.map((l, i) => ({ idx: letraAIndice(l), xml: nuevas[i] })).sort((p, q) => p.idx - q.idx).map(p => p.xml).join('');
+
+    let nuevaApertura = apertura.replace(/\sspans="(\d+):(\d+)"/, (m, a, b) => ` spans="${Math.min(Number(a), minCol)}:${b}"`);
+    return nuevaApertura + ordenadas + resto + '</row>';
+  });
+}
+
+async function construirArchivoHomologado(JSZipLib, buffer, mapa, letras) {
+  const zip = await JSZipLib.loadAsync(buffer);
+  const leer = async ruta => {
+    const f = zip.file(ruta);
+    if (!f) throw new Error('Falta ' + ruta + ' dentro del archivo.');
+    return f.async('string');
+  };
+  const rutaHoja = rutaHojaPrincipal(await leer('xl/workbook.xml'), await leer('xl/_rels/workbook.xml.rels'));
+  const { xml: estilosNuevos, ids } = agregarEstilos(await leer('xl/styles.xml'));
+  const hojaNueva = aplicarResultadosAlXml(await leer(rutaHoja), mapa, letras, ids);
+  zip.file(rutaHoja, hojaNueva, { createFolders: false });
+  zip.file('xl/styles.xml', estilosNuevos, { createFolders: false });
+  return zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
+}
+
+// Compara todo lo que NO es A, B o C (y los encabezados de A, B, C) entre el original y el resultado.
+function verificarIntegridad(XLSXlib, bufOriginal, bufNuevo, letras, filaEncabezado) {
+  const leer = b => { const wb = XLSXlib.read(b, { type: 'array' }); return wb.Sheets[wb.SheetNames[0]]; };
+  const wa = leer(bufOriginal), wb = leer(bufNuevo);
+  const rango = XLSXlib.utils.decode_range(wa['!ref']);
+  const escritas = new Set([letras.a, letras.b, letras.c].map(l => letraAIndice(l)));
+  let comparadas = 0;
+  const diferencias = [];
+  for (let r = rango.s.r; r <= rango.e.r; r++) {
+    for (let c = rango.s.c; c <= rango.e.c; c++) {
+      const dir = XLSXlib.utils.encode_cell({ r, c });
+      const ca = wa[dir], cb = wb[dir];
+      // En A-C solo se permite cambiar lo que estaba VACÍO en el original; lo que ya traía algo debe quedar igual.
+      if (escritas.has(c) && r > filaEncabezado && (!ca || ca.v === undefined || ca.v === null || ca.v === '')) continue;
+      comparadas++;
+      if ((ca ? ca.v : undefined) !== (cb ? cb.v : undefined) || (ca ? ca.t : undefined) !== (cb ? cb.t : undefined)) diferencias.push(dir);
+    }
+  }
+  return { comparadas, diferencias };
+}
+
+if (typeof module !== 'undefined') {
+  module.exports = {
+    UMBRALES, limpiarEspacios, normalizarTexto, esHabilitado, esDeshabilitado, indiceALetra, letraAIndice,
+    detectarEstructura, evaluarLexico, similitudTexto, diferenciasCriticas, trigramas, juntarCandidatos, armarPrompt, interpretarRespuestaIA,
+    elegirMejorSugerencia, homologarFila, escaparXml, rutaHojaPrincipal, agregarEstilos,
+    aplicarResultadosAlXml, construirArchivoHomologado, verificarIntegridad,
+  };
+}
+
+// =====================================================================
+// APP — pantalla, red y descarga. Usa las funciones del CORE.
+// Todo lo que se consulta en Supabase es de SOLO LECTURA.
+// =====================================================================
+const $ = id => document.getElementById(id);
+const esc = s => (s ?? '').toString().replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+const dormir = ms => new Promise(r => setTimeout(r, ms));
+
+
+const app = {
+  buffer: null,
+  nombre: '',
+  estructura: null,
+  resultados: [],
+  corriendo: false,
+  detener: false,
+  filtro: 'todos',
+  fallosIA: 0,
+  iaDesactivada: false,
+  iaMotivo: '',          // por qué se desactivó la IA en esta corrida
+  ritmoIA: false,        // se activa solo si Groq pone límite de velocidad
+  ultimaLlamadaIA: 0,
+  turnoIA: 0,           // próximo turno libre para llamar a la IA (se usa solo si Groq ya puso límite)
+  sinModoJSON: false,  // el modelo no admite response_format: se deja de pedirlo
+  cliente: '',          // cliente elegido en pantalla
+  grupos: {},           // nombre del cliente -> grupo de códigos que usa
+  clienteDeCorrida: '', // cliente con el que se hizo la última corrida
+  grupoDeCorrida: '',   // grupo de códigos de ese cliente
+};
+
+const ETIQUETA = { auto: 'Alta confianza', revisar: 'A revisar', sin: 'Sin equivalente', error: 'Con error' };
+
+// ---------- Red (solo lectura) ----------
+// ---------- Reintentos para fallas pasajeras (red, tiempo de espera, saturación) ----------
+// Con varios renglones a la vez, una falla momentánea NO debe cambiar el resultado de un renglón (por ejemplo,
+// quedarse sin la búsqueda por significado): se reintenta antes de dar por perdido un motor.
+// Los errores de verdad (cliente inexistente, permisos, petición mal hecha) no se reintentan.
+const RED_CONFIG = Object.assign({ intentos: 3, esperaMs: 300 }, window.__RED_CONFIG || {});
+const ERROR_PASAJERO = /timeout|timed out|temporar|failed to fetch|networkerror|network|overload|rate limit|too many|\b(429|5\d\d)\b|worker|resource limit|connection|econn/i;
+async function conReintentos(fn) {
+  let ultimo;
+  for (let i = 0; i < RED_CONFIG.intentos; i++) {
+    try { return await fn(); }
+    catch (e) {
+      ultimo = e;
+      if (i === RED_CONFIG.intentos - 1 || !ERROR_PASAJERO.test(String((e && e.message) || e))) throw e;
+      await dormir(RED_CONFIG.esperaMs * 2 ** i);
+    }
+  }
+  throw ultimo;
+}
+
+async function rpcLectura(nombre, args) {
+  return conReintentos(async () => {
+    const { data, error } = await supabase.rpc(nombre, args);
+    if (error) throw new Error(error.message);
+    return data;
+  });
+}
+
+// El core pide 'buscar_alias', 'buscar_similar' y 'buscar_semantico'; aquí se convierten SIEMPRE
+// en sus versiones por cliente. Si alguien pidiera otra función, se rechaza.
+const FUNCION_POR_CLIENTE = {
+  buscar_alias: 'buscar_alias_cliente',
+  buscar_similar: 'buscar_similar_cliente',
+  buscar_semantico: 'buscar_semantico_cliente',
+};
+function rpcPorCliente(cliente) {
+  return (nombre, args) => {
+    const fn = FUNCION_POR_CLIENTE[nombre];
+    if (!fn) throw new Error('Función no permitida: ' + nombre);
+    return rpcLectura(fn, { ...args, p_cliente: cliente });
+  };
+}
+
+async function pedirEmbedding(texto) {
+  return conReintentos(async () => {
+    const resp = await fetch(CONFIG.EMBEDDING_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + CONFIG.SUPABASE_KEY },
+      body: JSON.stringify({ textos: [texto] }),
+    });
+    if (!resp.ok) throw new Error('Edge Function respondió ' + resp.status);
+    const data = await resp.json();
+    return data.embeddings[0];
+  });
+}
+
+// ---------- IA (Motor 4 · Groq) con diagnóstico ----------
+// Cada tipo de falla se trata distinto: llave o modelo inválidos NO se reintentan (no sirve de nada);
+// límite de velocidad, red y fallas del servidor SÍ. Y siempre se dice la causa y qué hacer.
+const IA_CONFIG = Object.assign({ esperaBaseMs: 2000, ritmoMs: 2500, maxReintentos: 4 }, window.__IA_CONFIG || {});
+const CLAVE_IA = 'homologador-groq-key';
+
+function claveGroq() {
+  try { const k = (localStorage.getItem(CLAVE_IA) || '').trim(); if (k) return k; } catch (e) { /* sin almacenamiento */ }
+  return (LOCAL.GROQ_API_KEY || CONFIG.GROQ_API_KEY || '').trim();        // 1.º la pegada en pantalla, 2.º config.local.js, 3.º la incrustada
+}
+// Dirección de la función groq-proxy. Se puede apagar con GROQ_PROXY_URL: '' en config.local.js.
+function urlProxyIA() { const u = LOCAL.GROQ_PROXY_URL ?? CONFIG.GROQ_PROXY_URL; return (u || '').trim(); }
+// 'directo'  = con la llave de esta persona (pegada en pantalla o en config.local.js)
+// 'servidor' = la llave vive en Supabase y nadie la teclea
+// ''         = no hay IA disponible
+function modoIA() { if (claveGroq()) return 'directo'; if (urlProxyIA()) return 'servidor'; return ''; }
+
+function origenLlave() {
+  try { if ((localStorage.getItem(CLAVE_IA) || '').trim()) return 'navegador'; } catch (e) { /* sin almacenamiento */ }
+  if ((LOCAL.GROQ_API_KEY || '').trim()) return 'archivo';
+  if ((CONFIG.GROQ_API_KEY || '').trim()) return 'incrustada';
+  return '';
+}
+
+const MODELO_IA = 'homologador-groq-model';
+function modeloGroq() {
+  try { const m = (localStorage.getItem(MODELO_IA) || '').trim(); if (m) return m; } catch (e) { /* sin almacenamiento */ }
+  return LOCAL.GROQ_MODEL || CONFIG.GROQ_MODEL;
+}
+
+class ErrorIA extends Error {
+  constructor(tipo, mensaje, estado, esperarMs) { super(mensaje); this.tipo = tipo; this.estado = estado || 0; this.esperarMs = esperarMs || 0; }
+}
+
+function errorDeRespuesta(estado, cuerpo, esperarMs) {
+  let msg = '';
+  try { msg = JSON.parse(cuerpo).error?.message || ''; } catch (e) { msg = String(cuerpo || '').slice(0, 200); }
+  const detalle = `Groq ${estado}${msg ? ': ' + msg : ''}`;
+  if (estado === 400 && /response_format|json_object|json mode|failed to generate json|json_validate_failed/i.test(msg)) return new ErrorIA('formato', detalle, estado);
+  if (estado === 404 || (/model/i.test(msg) && /(decommission|not found|does not exist|no longer|deprecat|not have access|permission)/i.test(msg))) return new ErrorIA('modelo', detalle, estado);
+  if (estado === 401 || estado === 403) return new ErrorIA('llave', detalle, estado);
+  if (estado === 429) return new ErrorIA('limite', detalle, estado, esperarMs);
+  if (estado >= 500) return new ErrorIA('servidor', detalle, estado);
+  return new ErrorIA('otro', detalle, estado);
+}
+
+function explicarErrorIA(e) {
+  const tipo = e instanceof ErrorIA ? e.tipo : 'otro';
+  const det = e && e.message ? e.message : String(e);
+  switch (tipo) {
+    case 'sinllave': return 'Todavía no hay una llave de IA guardada en este navegador. Pulsa "Configurar llave", pégala y pulsa Guardar. Si ya la guardaste y vuelve a salir esto, estás abriendo el archivo desde otra dirección (por ejemplo con doble clic en lugar de Live Server): ábrelo siempre de la misma forma.';
+    case 'proxy': return `El servicio de IA del servidor no respondió bien (${det}). Quien administra Supabase debe revisar tres cosas: que la función groq-proxy esté desplegada, que exista el secreto GROQ_API_KEY y que esta dirección esté en ALLOWED_ORIGINS. Mientras tanto puedes pegar tu propia llave en "Configurar llave" y la IA funcionará con ella.`;
+    case 'llave': return `Groq no aceptó la llave (${det}). Revisa que esté bien copiada y que no la hayas borrado en console.groq.com → API Keys; si hace falta, crea una nueva y pégala en "Configurar llave".`;
+    case 'modelo': return `El modelo "${modeloGroq()}" no está disponible en Groq (${det}). Pulsa "Probar conexión con la IA" para ver qué modelos tiene tu cuenta.`;
+    case 'limite': return `Se alcanzó el límite de solicitudes de Groq (${det}). Espera uno o dos minutos y vuelve a intentar, o corre sin IA.`;
+    case 'red': return `No se pudo conectar con Groq (${det}). Revisa tu internet y si un antivirus o una extensión del navegador está bloqueando la conexión.`;
+    case 'servidor': return `Groq tuvo un problema de su lado (${det}). Intenta de nuevo en unos minutos.`;
+    case 'formato': return `Groq rechazó el formato de la petición (${det}).`;
+    default: return `Groq respondió: ${det}`;
+  }
+}
+
+async function llamarGroqUnaVez(prompt, conFormato) {
+  const clave = claveGroq();
+  const servidor = !clave && !!urlProxyIA();
+  if (!clave && !servidor) throw new ErrorIA('sinllave', 'no hay llave de IA guardada', 0);
+  let resp;
+  try {
+    resp = servidor ? await fetch(urlProxyIA(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + CONFIG.SUPABASE_KEY, apikey: CONFIG.SUPABASE_KEY },
+      body: JSON.stringify({ prompt }),                       // solo el texto: el modelo y la llave los pone el servidor
+    }) : await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + clave },
+      body: JSON.stringify({
+        model: modeloGroq(),
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0,
+        ...(conFormato ? { response_format: { type: 'json_object' } } : {}),
+      }),
+    });
+  } catch (e) {
+    throw new ErrorIA('red', e && e.message ? e.message : 'sin conexión', 0);
+  }
+  if (!resp.ok) {
+    const ra = parseFloat(resp.headers && resp.headers.get ? resp.headers.get('retry-after') : NaN);
+    const cuerpo = await resp.text();
+    if (servidor && [401, 403, 404, 405, 500, 502].includes(resp.status)) {        // fallas de la función en Supabase (no de la llave de esta persona)
+      let m = ''; try { m = JSON.parse(cuerpo).error?.message || JSON.parse(cuerpo).message || ''; } catch (e) { m = String(cuerpo).slice(0, 120); }
+      throw new ErrorIA('proxy', `${resp.status}${m ? ': ' + m : ''}`, resp.status);
+    }
+    throw errorDeRespuesta(resp.status, cuerpo, Number.isFinite(ra) ? ra * 1000 : 0);
+  }
+  const data = await resp.json();
+  return data.choices?.[0]?.message?.content ?? '{}';
+}
+
+async function esperarRitmoIA() {
+  if (!app.ritmoIA) return;                      // solo se frena si Groq ya puso límite de velocidad
+  const ahora = Date.now();
+  const turno = Math.max(ahora, app.turnoIA);    // cada llamada reserva su turno: con varios renglones a la vez no se rebasa el límite
+  app.turnoIA = turno + IA_CONFIG.ritmoMs;
+  if (turno > ahora) await dormir(turno - ahora);
+}
+
+async function llamarGroq(prompt) {
+  let conFormato = !app.sinModoJSON, ultimo = null;
+  for (let intento = 0; intento <= IA_CONFIG.maxReintentos; intento++) {
+    await esperarRitmoIA();
+    app.ultimaLlamadaIA = Date.now();
+    try {
+      return await llamarGroqUnaVez(prompt, conFormato);
+    } catch (e) {
+      if (!(e instanceof ErrorIA)) throw e;
+      ultimo = e;
+      if (e.tipo === 'formato' && conFormato) { conFormato = false; app.sinModoJSON = true; continue; }   // ese modelo no admite el modo JSON: se reintenta sin él y se recuerda
+      if (e.tipo === 'limite') {                                                  // límite de velocidad: se espera y se baja el ritmo
+        app.ritmoIA = true;
+        await dormir(Math.min(e.esperarMs || IA_CONFIG.esperaBaseMs * 2 ** intento, 60000));
+        continue;
+      }
+      if (e.tipo === 'red' || e.tipo === 'servidor') { await dormir(Math.min(IA_CONFIG.esperaBaseMs * 2 ** intento, 30000)); continue; }
+      throw e;                                                                    // llave, modelo u otro: reintentar no sirve
+    }
+  }
+  throw ultimo;
+}
+
+async function preguntarIA(prompt) {
+  if (app.iaDesactivada) throw new ErrorIA('desactivada', 'la IA se desactivó en esta corrida', 0);
+  try {
+    const t = await llamarGroq(prompt);
+    app.fallosIA = 0;
+    return t;
+  } catch (e) {
+    app.fallosIA++;
+    const fatal = e instanceof ErrorIA && (e.tipo === 'llave' || e.tipo === 'modelo' || e.tipo === 'sinllave' || e.tipo === 'proxy');
+    if (fatal || app.fallosIA >= 3) {
+      app.iaDesactivada = true;
+      app.iaMotivo = explicarErrorIA(e);
+      aviso('La IA se desactivó para el resto de esta corrida; lo demás sigue normal y los renglones quedan en revisión con su mejor sugerencia. ' + app.iaMotivo, fatal ? 'error' : 'warn');
+    }
+    throw e;
+  }
+}
+
+// ---- Panel "IA": probar la conexión y guardar la llave (solo en este navegador) ----
+function pintarEstadoIA(clase, texto, detalle) {
+  const e = $('h-ia-estado'); e.className = 'ia-estado' + (clase ? ' ' + clase : ''); e.textContent = texto;
+  $('h-ia-detalle').textContent = detalle || '';
+}
+function textoLlave() {
+  const k = claveGroq();
+  const donde = location.origin && location.origin !== 'null' ? location.origin : 'este archivo';
+  if (!k && urlProxyIA()) return 'IA del servidor: no necesitas pegar ninguna llave (si pegas la tuya, se usa la tuya)';
+  if (!k) return `sin llave configurada · la llave pegada en pantalla se guarda por dirección y esta es ${donde}; si abres el programa desde otra dirección habrá que pegarla otra vez. Para no repetirla nunca, guárdala en config.local.js`;
+  const o = origenLlave();
+  const lugar = o === 'archivo' ? 'tomada de config.local.js' : o === 'incrustada' ? 'incrustada en el archivo' : `guardada en este navegador para ${donde}`;
+  return `llave configurada (termina en …${k.slice(-4)}) · ${lugar}`;
+}
+
+async function probarIA() {
+  if ($('h-ia-llave').value.trim()) guardarLlave();      // la pegaste pero no pulsaste Guardar: se guarda sola
+  const boton = $('h-btn-probar-ia');
+  boton.disabled = true;
+  pintarEstadoIA('', 'Probando…', '');
+  if (modoIA() === 'servidor') {                                   // sin llave propia: se prueba la función de Supabase
+    try {
+      const t0 = Date.now();
+      const respuesta = await llamarGroq('Responde ÚNICAMENTE con este JSON exacto: {"eleccion": 1, "razon": "prueba"}');
+      interpretarRespuestaIA(respuesta, 3);
+      pintarEstadoIA('ok', 'IA funcionando', `IA del servidor · no necesitas ninguna llave · respondió en ${Date.now() - t0} ms`);
+    } catch (e) {
+      pintarEstadoIA('mal', 'IA con problema', explicarErrorIA(e));
+    } finally { boton.disabled = false; }
+    return;
+  }
+  try {
+    const clave = claveGroq();
+    if (!clave) throw new ErrorIA('sinllave', 'no hay llave de IA guardada', 0);
+    let r;
+    try { r = await fetch('https://api.groq.com/openai/v1/models', { headers: { Authorization: 'Bearer ' + clave } }); }
+    catch (e) { throw new ErrorIA('red', e && e.message ? e.message : 'sin conexión', 0); }
+    const txt = await r.text();
+    if (!r.ok) throw errorDeRespuesta(r.status, txt, 0);
+    const ids = (JSON.parse(txt).data || []).map(m => m.id);
+    llenarModelos(ids);
+    if (ids.length && !ids.includes(modeloGroq())) {
+      throw new ErrorIA('modelo', `"${modeloGroq()}" no aparece entre los modelos de tu cuenta. Disponibles: ${ids.filter(esModeloDeChat).slice(0, 12).join(', ')}`, 404);
+    }
+    const t0 = Date.now();
+    const respuesta = await llamarGroq('Responde ÚNICAMENTE con este JSON exacto: {"eleccion": 1, "razon": "prueba"}');
+    interpretarRespuestaIA(respuesta, 3);
+    pintarEstadoIA('ok', 'IA funcionando', `${modeloGroq()} · respondió en ${Date.now() - t0} ms · ${textoLlave()}`);
+  } catch (e) {
+    pintarEstadoIA('mal', 'IA con problema', explicarErrorIA(e));
+  } finally {
+    boton.disabled = false;
+  }
+}
+
+function esModeloDeChat(id) { return !/whisper|tts|guard|embed|playai|orpheus|transcri|speech/i.test(id); }
+function modeloSugerido(ids) {
+  const preferencias = [/^llama-3\.3-70b-versatile$/, /gpt-oss-120b/, /llama-3\.1-70b/, /llama.*70b/, /gpt-oss-20b/, /llama.*8b/];
+  for (const re of preferencias) { const m = ids.find(id => re.test(id)); if (m) return m; }
+  return ids[0] || '';
+}
+function llenarModelos(ids) {
+  const modelos = ids.filter(esModeloDeChat).sort();
+  if (!modelos.length) return;
+  const sel = $('h-ia-modelo');
+  const actual = modeloGroq();
+  sel.innerHTML = modelos.map(id => `<option value="${esc(id)}">${esc(id)}</option>`).join('');
+  sel.value = modelos.includes(actual) ? actual : modeloSugerido(modelos);
+  $('h-ia-modelo-fila').style.display = 'flex';
+}
+function usarModelo() {
+  const m = $('h-ia-modelo').value;
+  if (!m) return;
+  try { localStorage.setItem(MODELO_IA, m); }
+  catch (e) { pintarEstadoIA('mal', 'No se pudo guardar', 'Tu navegador no permite guardar datos locales. Cambia GROQ_MODEL directo en el archivo.'); return; }
+  app.sinModoJSON = false;
+  probarIA();     // comprueba de inmediato que el modelo elegido responde
+}
+
+function alternarFormularioLlave() {
+  const f = $('h-ia-llave-form');
+  f.style.display = f.style.display === 'flex' ? 'none' : 'flex';
+}
+function guardarLlave() {
+  const v = $('h-ia-llave').value.trim().replace(/^["'`\s]+|["'`\s]+$/g, '');   // sin comillas ni espacios de más
+  try {
+    if (v) localStorage.setItem(CLAVE_IA, v); else localStorage.removeItem(CLAVE_IA);
+  } catch (e) {
+    pintarEstadoIA('mal', 'No se pudo guardar', 'Tu navegador no permite guardar datos locales. Pega la llave directo en el archivo, en GROQ_API_KEY.');
+    return;
+  }
+  $('h-ia-llave').value = '';
+  $('h-ia-llave-form').style.display = 'none';
+  pintarEstadoIA('', v ? 'Llave guardada' : 'Llave quitada', textoLlave() + (v ? '. Pulsa "Probar conexión con la IA" para comprobarla.' : '.') + (v && !v.startsWith('gsk_') ? ' Ojo: no empieza con gsk_, no parece una llave de Groq.' : ''));
+}
+
+// ---------- Mensajes ----------
+function aviso(texto, tipo = 'info') {
+  const el = $('h-avisos');
+  const div = document.createElement('div');
+  div.className = 'aviso ' + tipo;
+  div.textContent = texto;
+  el.appendChild(div);
+}
+function limpiarAvisos() { $('h-avisos').innerHTML = ''; }
+
+// ---------- Carga del archivo ----------
+async function cargarArchivo(file) {
+  limpiarAvisos();
+  if (!/\.xlsx$/i.test(file.name)) { aviso('Sube un archivo .xlsx en el formato BI estándar.', 'error'); return; }
+  try {
+    const buf = new Uint8Array(await file.arrayBuffer());
+    const wb = XLSX.read(buf, { type: 'array' });
+    const est = detectarEstructura(XLSX, wb.Sheets[wb.SheetNames[0]]);
+    if (wb.SheetNames.length > 1) est.avisos.push(`El archivo trae ${wb.SheetNames.length} hojas; solo se procesa la primera ("${wb.SheetNames[0]}").`);
+    if (!est.filas.length) {
+      aviso(est.yaLlenas.length
+        ? 'Todos los renglones ya traen datos de CALLMED en A, B o C; no hay nada que homologar.'
+        : 'No encontré descripciones del proveedor para homologar.', 'error');
+      return;
+    }
+    app.buffer = buf; app.nombre = file.name; app.estructura = est; app.resultados = [];
+    $('h-archivo-info').innerHTML =
+      `<b>${esc(file.name)}</b> · formato BI reconocido · <b>${est.filas.length}</b> renglones por homologar` +
+      (est.yaLlenas.length ? ` · <b>${est.yaLlenas.length}</b> ya traían CALLMED y no se tocarán` : '') +
+      ` · se llenan solo las columnas <b>A, B y C</b>`;
+    est.avisos.forEach(a => aviso(a, 'warn'));
+    $('h-btn-descargar').disabled = true;
+    $('h-msg-integridad').textContent = '';
+    actualizarDuplicados();
+    actualizarBoton();
+    actualizarContadores(); renderTabla();
+  } catch (e) {
+    // Si el archivo no sirve, no se deja cargado el anterior: así no se homologa por error el equivocado.
+    app.buffer = null; app.estructura = null; app.resultados = [];
+    $('h-archivo-info').textContent = '';
+    aviso('No pude usar el archivo: ' + e.message, 'error');
+    (e.problemas || []).forEach(p => aviso(p, 'error'));
+    actualizarDuplicados();
+    actualizarBoton();
+    actualizarContadores(); renderTabla();
+  }
+}
+
+// ---------- Corrida ----------
+async function homologar() {
+  if (!app.estructura || app.corriendo) return;
+  if ($('h-ia-llave').value.trim()) guardarLlave();      // la pegaste pero no pulsaste Guardar: se guarda sola
+  if (!app.cliente) { aviso('Elige primero el cliente para el que vas a homologar.', 'error'); return; }
+  limpiarAvisos();
+
+  // Chequeo previo: la base debe reconocer al cliente. Si no (por ejemplo, falta correr el script 03),
+  // se avisa aquí en vez de generar un archivo vacío sin explicación.
+  const cliente = app.cliente;
+  let grupo;
+  try {
+    grupo = await rpcLectura('grupo_de_cliente', { p_cliente: cliente });
+  } catch (e) {
+    aviso(`No pude validar el cliente "${cliente}" en la base: ${e.message}. ¿Ya corriste el script 03?`, 'error');
+    return;
+  }
+
+  app.corriendo = true; app.detener = false; app.resultados = [];
+  app.fallosIA = 0; app.iaDesactivada = false; app.iaMotivo = ''; app.turnoIA = 0; app.clienteDeCorrida = cliente;
+  const umbral = umbralActual(); UMBRALES.AUTO = umbral / 100; app.umbralDeCorrida = umbral; app.grupoDeCorrida = grupo;
+  let usarIA = $('h-chk-ia').checked;
+  if (usarIA && !modoIA()) {
+    usarIA = false;
+    aviso('No hay llave de IA configurada: esta corrida usará solo alias, texto y significado. Configúrala en el paso 3 ("Configurar llave") y pulsa "Probar conexión con la IA".', 'warn');
+  }
+  const deps = { aliasDisponible: true, rpc: rpcPorCliente(cliente), embedding: pedirEmbedding, preguntarIA, clinico: motor2bActivo() ? clinico : null };
+  app.clinicoDeCorrida = deps.clinico;     // para evitar repetidos: tampoco se proponen alternativas con diferencia clínica dura
+  let fallosBusqueda = 0;
+
+  $('h-btn-homologar').disabled = true; $('h-btn-detener').disabled = false; $('h-btn-descargar').disabled = true;
+  $('h-input-archivo').disabled = true; $('h-cliente').disabled = true;
+  $('h-cliente-resultado').textContent = `Cliente: ${etiquetaDe(cliente)} · usa solo los códigos del grupo ${grupo} · confianza mínima ${umbral}%`;
+  $('h-progreso').classList.add('activo');
+  $('h-barra').style.width = '0%';
+  $('h-progreso-texto').textContent = 'Iniciando…';
+  $('h-msg-integridad').textContent = '';
+
+  const filas = app.estructura.filas;
+  const concurrencia = Math.max(1, Math.min(concurrenciaActual(), filas.length));
+  const resultadosPorIndice = new Array(filas.length);   // cada renglón guarda su resultado en SU lugar: el orden del archivo no cambia
+  const memo = new Map();                                // mismo texto -> mismo resultado: se calcula una sola vez
+  let siguiente = 0, terminadas = 0, ultimoDibujo = 0;
+  const t0 = Date.now();
+
+  const calcular = async (texto) => {
+    const clave = normalizarTexto(texto);
+    if (memo.has(clave)) return memo.get(clave);
+    const promesa = (async () => {
+      try { return await homologarFila(deps, texto, { usarIA: usarIA && !app.iaDesactivada, usarSemantico: true }); }
+      catch (e) { return { estado: 'error', metodo: 'Error', notas: [e.message], pistas: [], cpt: null, descripcion: null, tipo: null, textoPct: null }; }
+    })();
+    memo.set(clave, promesa);
+    const res = await promesa;
+    if (res.estado === 'error') memo.delete(clave);      // un error no se reutiliza: el siguiente renglón con ese texto lo vuelve a intentar
+    return res;
+  };
+
+  const trabajador = async () => {
+    while (!app.detener) {
+      const i = siguiente++;
+      if (i >= filas.length) return;
+      const f = filas[i];
+      const base = await calcular(f.texto);
+      const res = { ...base, notas: [...(base.notas || [])], pistas: [...(base.pistas || [])] };   // copia: dos renglones con el mismo texto no comparten listas
+      const registro = { fila: f.fila, texto: f.texto, ...res };
+      registro.base = instantanea(registro);                 // lo que decidieron los motores, antes de evitar repetidos
+      resultadosPorIndice[i] = registro;
+      terminadas++;
+      fallosBusqueda = res.notas.some(n => n.startsWith('Motor 2 falló')) ? fallosBusqueda + 1 : 0;
+      if (fallosBusqueda >= 3 && !app.detener) {
+        app.detener = true;
+        aviso('La búsqueda falló 3 veces seguidas (' + (res.notas.find(n => n.startsWith('Motor 2 falló')) || '') + '). Se detuvo la corrida para que no quede un archivo vacío.', 'error');
+      }
+      app.resultados = resultadosPorIndice.filter(Boolean);   // siempre en el orden del archivo, aunque terminen desordenados
+
+      let eta = '';
+      if (terminadas >= 8 && terminadas < filas.length) {
+        const faltan = (filas.length - terminadas) * ((Date.now() - t0) / 1000 / terminadas);
+        eta = faltan >= 90 ? ` · unos ${Math.ceil(faltan / 60)} min restantes` : ` · unos ${Math.ceil(faltan)} s restantes`;
+      }
+      $('h-barra').style.width = Math.round((terminadas / filas.length) * 100) + '%';
+      $('h-progreso-texto').textContent = `Homologando ${terminadas} de ${filas.length}${eta}…`;
+      actualizarContadores();
+      if (Date.now() - ultimoDibujo > 1200) { renderTabla(); ultimoDibujo = Date.now(); }   // la tabla se redibuja cada ~1 s, no en cada renglón
+    }
+  };
+  await Promise.all(Array.from({ length: concurrencia }, trabajador));
+
+  const hechas = app.resultados.length;
+  $('h-progreso-texto').textContent = app.detener
+    ? `Detenido: ${hechas} de ${filas.length} renglones procesados. Lo demás queda sin tocar.`
+    : `Listo: ${hechas} renglones procesados.`;
+  app.corriendo = false;
+  $('h-btn-detener').disabled = true;
+  $('h-input-archivo').disabled = false; $('h-cliente').disabled = false;
+  actualizarBoton();
+  $('h-btn-descargar').disabled = hechas === 0;
+  aplicarRepetidos();
+}
+
+// ---------- Resultados en pantalla ----------
+function actualizarContadores() {
+  const c = { auto: 0, revisar: 0, sin: 0, error: 0 };
+  app.resultados.forEach(r => c[r.estado]++);
+  $('h-cnt-total').textContent = app.estructura ? app.estructura.filas.length : 0;
+  $('h-cnt-auto').textContent = c.auto;
+  $('h-cnt-revisar').textContent = c.revisar;
+  $('h-cnt-sin').textContent = c.sin;
+  $('h-cnt-error').textContent = c.error;
+  $('h-caja-error').style.display = c.error ? '' : 'none';
+  $('h-tab-todos').textContent = `Todos (${app.resultados.length})`;
+  $('h-tab-auto').textContent = `Alta confianza (${c.auto})`;
+  $('h-tab-revisar').textContent = `A revisar (${c.revisar})`;
+  $('h-tab-sin').textContent = `Sin equivalente (${c.sin})`;
+}
+
+// El formato BI marca en rojo, con una regla de Excel, los códigos CALLMED repetidos en la columna A.
+// Aquí se avisa en pantalla antes de descargar. Repetir un código no siempre es un error: solo hay que revisarlo.
+function duplicadosCallmed() {
+  const m = new Map();
+  app.resultados.forEach(r => { if (r.cpt) { if (!m.has(r.cpt)) m.set(r.cpt, []); m.get(r.cpt).push(r.fila); } });
+  return [...m.entries()].filter(([, filas]) => filas.length > 1);
+}
+function actualizarDistribucion() {
+  const el = $('h-distribucion');
+  const filas = app.resultados.filter(r => r.estado !== 'error');
+  if (!filas.length) { el.textContent = ''; return; }
+  const b = { a: 0, b: 0, c: 0, d: 0, e: 0, sin: 0 };
+  filas.forEach(r => {
+    const p = r.textoPct;
+    if (p == null) b.sin++; else if (p >= 90) b.a++; else if (p >= 80) b.b++; else if (p >= 70) b.c++; else if (p >= 60) b.d++; else b.e++;
+  });
+  el.innerHTML = `<b>Coincidencia de texto:</b> 90–100%: ${b.a} · 80–89%: ${b.b} · 70–79%: ${b.c} · 60–69%: ${b.d} · menos de 60%: ${b.e}` + (b.sin ? ` · sin sugerencia: ${b.sin}` : '');
+}
+
+// ---------- Evitar códigos CALLMED repetidos ----------
+// Regla: un código CALLMED lo usa UN solo renglón del proveedor. Si dos renglones con textos distintos caen en el mismo
+// código, se queda el que más se parece (o el que una persona confirmó) y el otro pasa a su siguiente opción razonable,
+// o se queda sin código si no la hay. Un mismo texto repetido por el proveedor sí comparte código (es el mismo servicio).
+// Los motores no se tocan: cada renglón guarda su asignación original ("base") y de ahí se recalcula,
+// así que se puede apagar y prender sin volver a consultar nada.
+function instantanea(r) {
+  return { cpt: r.cpt, descripcion: r.descripcion, tipo: r.tipo, estado: r.estado, metodo: r.metodo, textoPct: r.textoPct, razon: r.razon,
+           notas: [...(r.notas || [])], pistas: [...(r.pistas || [])] };
+}
+const esProtegido = r => !!r.confirmado || (r.metodo || '').includes('alias confirmado');
+
+function resolverRepetidos(activo) {
+  app.resultados.forEach(r => {                       // 1) todos vuelven a lo que decidieron los motores (o a lo que confirmó una persona)
+    if (!r.base) return;
+    Object.assign(r, { ...r.base, notas: [...r.base.notas], pistas: [...r.base.pistas], ajustado: false });
+  });
+  if (!activo) return 0;
+
+  const minPct = Math.round(UMBRALES.MIN_SUGERENCIA_LEXICO * 100);
+  const perdidos = new Map();                          // fila -> códigos que ese renglón ya perdió (no vuelve a ellos)
+  const serviciosPerdidos = new Map();                 // fila -> descripciones de esos códigos: otro código del MISMO servicio no es una alternativa
+  const fuerza = bloque => [bloque.some(esProtegido) ? 1 : 0, bloque.some(r => r.estado === 'auto') ? 1 : 0,
+                            Math.max(...bloque.map(r => r.textoPct ?? 0)), -Math.min(...bloque.map(r => r.fila))];
+  const mayor = (a, b) => { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] > b[i]; return false; };
+
+  const reasignar = (r, cptPerdido, ganadora) => {
+    if (!perdidos.has(r.fila)) { perdidos.set(r.fila, new Set()); serviciosPerdidos.set(r.fila, new Set()); }
+    perdidos.get(r.fila).add(cptPerdido);
+    serviciosPerdidos.get(r.fila).add(normalizarTexto(ganadora.descripcion || ''));
+    const tomados = new Set(app.resultados.filter(x => x !== r && x.cpt).map(x => x.cpt));
+    const alt = (r.alternativas || []).find(a =>
+      !perdidos.get(r.fila).has(a.cpt) && !tomados.has(a.cpt) &&
+      !serviciosPerdidos.get(r.fila).has(normalizarTexto(a.descripcion)) &&          // no vale "otro código con la misma descripción"
+      !(a.estatus && /deshabilit|inhabilit/i.test(a.estatus)) &&
+      a.pct >= minPct && diferenciasCriticas(r.texto, a.descripcion).length === 0 &&
+      (!app.clinicoDeCorrida || app.clinicoDeCorrida.evaluar(r.texto, a.descripcion).hard.length === 0));   // ni algo que apenas se parece, ni que cambie el servicio
+    const motivo = `Su mejor opción (${cptPerdido}) ya la usa la fila ${ganadora.fila}, que se parece más`;
+    const notasBase = r.base.notas.filter(n => !n.startsWith('Coincidencia de texto') && !n.startsWith('Difieren'));
+    r.ajustado = true;
+    if (alt) {
+      const umbral = app.umbralDeCorrida || 80;
+      Object.assign(r, {
+        cpt: alt.cpt, descripcion: alt.descripcion, tipo: alt.tipo_de_servicio ?? null, textoPct: alt.pct, estado: 'revisar', pistas: [],
+        metodo: `${r.base.metodo} · ajustado por código repetido`,
+        notas: [...notasBase, `${motivo}; se propone el siguiente.`, ...(alt.pct < umbral ? [`Coincidencia de texto ${alt.pct}% (mínimo ${umbral}%)`] : [])],
+      });
+    } else {
+      Object.assign(r, {
+        cpt: null, descripcion: null, tipo: null, textoPct: null, estado: 'sin', pistas: [],
+        metodo: `${r.base.metodo} · sin alternativa`,
+        notas: [...notasBase, `${motivo}, y no hay otra alternativa razonable.`],
+      });
+    }
+  };
+
+  for (let vuelta = 0; vuelta < 40; vuelta++) {       // 2) se repite hasta que no quede ningún conflicto (un ajuste puede chocar con otro)
+    const porCodigo = new Map();
+    app.resultados.forEach(r => { if (r.cpt) { if (!porCodigo.has(r.cpt)) porCodigo.set(r.cpt, []); porCodigo.get(r.cpt).push(r); } });
+    let hubo = false;
+    for (const [cpt, filas] of porCodigo) {
+      if (filas.length < 2) continue;
+      const grupos = new Map();                        // renglones con el MISMO texto forman un solo bloque
+      filas.forEach(r => { const k = normalizarTexto(r.texto); if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(r); });
+      if (grupos.size < 2) continue;
+      const bloques = [...grupos.values()].sort((a, b) => (mayor(fuerza(a), fuerza(b)) ? -1 : mayor(fuerza(b), fuerza(a)) ? 1 : 0));
+      const ganador = bloques[0];
+      bloques.slice(1).forEach(bloque => bloque.forEach(r => {
+        if (esProtegido(r)) return;                    // lo que una persona confirmó no se mueve
+        if (r.estado === 'auto' && ganador.some(esProtegido)) return;   // una persona confirmó OTRO renglón con este código y este es un acierto claro: no se le quita en silencio; quedan los dos a la vista como repetidos
+        reasignar(r, cpt, ganador[0]); hubo = true;
+      }));
+    }
+    if (!hubo) break;
+  }
+  return app.resultados.filter(r => r.ajustado).length;
+}
+
+function aplicarRepetidos() {
+  resolverRepetidos($('h-evitar-repetidos').checked);
+  actualizarContadores(); actualizarDuplicados(); renderTabla();
+}
+
+function actualizarDuplicados() {
+  actualizarDistribucion();      // se refresca junto con los repetidos (mismos momentos: al cargar, terminar, confirmar y cambiar de cliente)
+  const aj = $('h-ajustes');
+  const nAjustados = app.resultados.filter(r => r.ajustado).length;
+  if (nAjustados) {
+    aj.style.display = 'block';
+    aj.innerHTML = `Se ajustaron <b>${nAjustados}</b> ${nAjustados > 1 ? 'renglones' : 'renglón'} para que no se repita el código CALLMED: se quedaron con su siguiente opción o sin código, y cada uno explica por qué. ` +
+      'Si apagas "Evitar códigos CALLMED repetidos" ves lo que sugerían los motores.';
+  } else { aj.style.display = 'none'; aj.textContent = ''; }
+  const caja = $('h-duplicados');
+  const d = duplicadosCallmed();
+  if (!d.length) { caja.style.display = 'none'; caja.textContent = ''; return; }
+  caja.style.display = 'block';
+  caja.innerHTML = `<b>${d.length} código${d.length > 1 ? 's' : ''} CALLMED se repite${d.length > 1 ? 'n' : ''}</b> en más de un renglón: ` +
+    d.slice(0, 6).map(([c, filas]) => `${esc(c)} (filas ${filas.join(', ')})`).join(' · ') + (d.length > 6 ? ' · …' : '') +
+    ($('h-evitar-repetidos').checked
+      ? '. Solo pasa si el proveedor mandó el mismo texto más de una vez, o si una persona confirmó uno de los renglones y el otro era un acierto claro (decide la persona); el formato los marca en rojo en Excel.'
+      : '. El formato los marca en rojo en Excel; revisa que sea correcto.');
+}
+
+function renderTabla() {
+  const lista = app.filtro === 'todos' ? app.resultados : app.resultados.filter(r => r.estado === app.filtro);
+  const tbody = $('h-tbody');
+  const dup = new Map(duplicadosCallmed());
+  if (!lista.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="vacio">${app.resultados.length ? 'No hay renglones en este filtro.' : 'Aún no hay resultados.'}</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = lista.map(r => {
+    const yaConfirmado = r.confirmado || (r.metodo || '').includes('alias confirmado');
+    const accion = !r.cpt ? '' : (yaConfirmado
+      ? '<span class="meta">✓ confirmado</span>'
+      : `<button class="btn-confirmar" data-confirmar="${r.fila}">Confirmar</button>`);
+    return `
+    <tr>
+      <td class="num">${r.fila}</td>
+      <td>${esc(r.texto)}</td>
+      <td>${r.cpt ? `<span class="codigo">${esc(r.cpt)}</span><br>${esc(r.descripcion)}<div class="meta">${esc(r.tipo ?? '')}</div>` : '<span class="meta">—</span>'}</td>
+      <td class="pct ${r.textoPct != null && r.textoPct >= (app.umbralDeCorrida || 80) ? 'pct-ok' : 'pct-bajo'}">${r.textoPct == null ? '—' : r.textoPct + '%'}</td>
+      <td class="meta">${esc(r.metodo)}${(r.etapas && r.etapas.length) ? `<div class="etapas">Pasó por: ${esc(r.etapas.join(' · '))}</div>` : ''}${r.razon ? `<div>IA: ${esc(r.razon)}</div>` : ''}${(r.pistas || []).map(n => `<div>✓ ${esc(n)}</div>`).join('')}${(r.notas || []).map(n => `<div>⚠ ${esc(n)}</div>`).join('')}${dup.has(r.cpt) ? `<div>⚠ este código también está en la fila ${dup.get(r.cpt).filter(x => x !== r.fila).join(', ')}</div>` : ''}</td>
+      <td><span class="badge ${r.estado}">${ETIQUETA[r.estado]}</span></td>
+      <td>${accion}</td>
+    </tr>`;
+  }).join('');
+}
+
+// Confirmar: una persona da por buena la sugerencia. Se guarda para ESE cliente (alias por grupo),
+// y en el archivo el renglón pasa a verde.
+async function confirmarFila(fila) {
+  const r = app.resultados.find(x => x.fila === fila);
+  if (!r || !r.cpt || r.confirmado) return;
+  const { error } = await supabase.from('alias_confirmados').upsert([{
+    texto_normalizado: normalizarTexto(r.texto),
+    texto_original: r.texto,
+    cpt: r.cpt,
+    descripcion: r.descripcion,
+    tipo_de_servicio: r.tipo,
+    grupo: app.grupoDeCorrida,
+  }], { onConflict: 'texto_normalizado,grupo' });
+  if (error) { aviso('No se pudo confirmar: ' + error.message, 'error'); return; }
+  r.confirmado = true; r.estado = 'auto'; r.metodo = 'Confirmado por una persona';
+  r.base = instantanea(r);            // lo confirmado por una persona es ahora la asignación de origen de ese renglón
+  aplicarRepetidos();                 // y ya no se mueve: si otro renglón tenía ese mismo código, es el que se ajusta
+}
+
+// ---------- Descarga ----------
+async function descargar() {
+  if (!app.buffer || !app.resultados.length) return;
+  $('h-btn-descargar').disabled = true;
+  try {
+    const mapa = {};
+    app.resultados.forEach(r => {
+      if (r.estado === 'error') return; // los renglones con error no se tocan
+      mapa[r.fila] = { estado: r.estado, cpt: r.cpt, descripcion: r.descripcion, tipo: r.tipo };
+    });
+    const salida = await construirArchivoHomologado(JSZip, app.buffer, mapa, app.estructura.letras);
+
+    const integ = verificarIntegridad(XLSX, app.buffer, salida, app.estructura.letras, app.estructura.filaEncabezado);
+    if (integ.diferencias.length) {
+      $('h-msg-integridad').className = 'integridad mal';
+      $('h-msg-integridad').textContent = `Se detectaron diferencias fuera de las columnas A, B y C (${integ.diferencias.slice(0, 5).join(', ')}…). No se descargó el archivo.`;
+      return;
+    }
+    $('h-msg-integridad').className = 'integridad bien';
+    $('h-msg-integridad').textContent =
+      `Verificado: se compararon ${integ.comparadas} celdas (precios, códigos, descripciones y encabezados) y ninguna cambió.`;
+
+    const blob = new Blob([salida], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const sufijoCliente = etiquetaDe(app.clienteDeCorrida).toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_|_$/g, '');
+    a.download = app.nombre.replace(/\.xlsx$/i, '') + '_HOMOLOGADO_' + sufijoCliente + '.xlsx';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  } catch (e) {
+    aviso('No se pudo generar el archivo: ' + e.message, 'error');
+  } finally {
+    $('h-btn-descargar').disabled = false;
+  }
+}
+
+// ---------- Cliente ----------
+function actualizarBoton() {
+  $('h-btn-homologar').disabled = !(app.estructura && app.cliente && !app.corriendo);
+}
+
+// ---------- Clientes que comparten lista: UNA sola opción en pantalla ----------
+// INDEP, Luz y Fuerza y Banrural usan exactamente los mismos códigos (el grupo GENERAL). La tabla clientes de la base
+// sigue con una fila por cliente; aquí solo se agrupan para mostrarlos. Al elegir la opción se le manda a la base el
+// nombre de uno de ellos (cualquiera resuelve al mismo grupo), así que la base y los scripts no se tocan.
+const ORDEN_CLIENTES = ['INDEP', 'LYF', 'BANRURAL'];               // cómo se ordenan cuando se muestran juntos
+const SIGLAS_CLIENTES = { 'LUZ Y FUERZA': 'LYF' };
+function etiquetaDeClientes(nombres) {
+  // se parten las filas que ya vinieran unidas y se pasan a sigla ANTES de quitar repetidos (LUZ Y FUERZA y LYF son el mismo)
+  const partes = [...new Set(nombres.flatMap(n => String(n).split(' / ')).map(n => SIGLAS_CLIENTES[n] || n))];
+  const orden = n => { const i = ORDEN_CLIENTES.indexOf(n); return i === -1 ? 99 : i; };
+  return partes.sort((a, b) => orden(a) - orden(b) || a.localeCompare(b, 'es')).join(' / ');
+}
+function agruparClientes(data) {
+  const porGrupo = new Map();
+  data.forEach(r => { if (!porGrupo.has(r.grupo_catalogo)) porGrupo.set(r.grupo_catalogo, []); porGrupo.get(r.grupo_catalogo).push(r.nombre); });
+  const opciones = [];
+  porGrupo.forEach((nombres, grupo) => {
+    const valor = [...nombres].sort((a, b) => a.localeCompare(b, 'es'))[0];     // el cliente real que se manda a la base
+    opciones.push({ valor, grupo, miembros: nombres, etiqueta: nombres.length > 1 ? etiquetaDeClientes(nombres) : valor });
+  });
+  return opciones.sort((a, b) => a.etiqueta.localeCompare(b.etiqueta, 'es'));
+}
+function etiquetaDe(nombre) { return (app.etiquetas && app.etiquetas[nombre]) || nombre; }
+
+async function cargarClientes() {
+  const selectores = ['h-cliente', 'q-cliente'];
+  try {
+    const { data, error } = await supabase.from('clientes').select('nombre, grupo_catalogo').order('nombre');
+    if (error) throw new Error(error.message);
+    if (!data || !data.length) throw new Error('la tabla de clientes está vacía');
+    app.grupos = Object.fromEntries(data.map(r => [r.nombre, r.grupo_catalogo]));
+    const opciones = agruparClientes(data);
+    app.etiquetas = {};
+    opciones.forEach(o => o.miembros.forEach(n => { app.etiquetas[n] = o.etiqueta; }));
+    const opcionesCliente = '<option value="">Elige un cliente…</option>' +
+      opciones.map(o => `<option value="${esc(o.valor)}">${esc(o.etiqueta)}</option>`).join('');
+    selectores.forEach(id => { $(id).innerHTML = opcionesCliente; });
+
+    // Grupos de códigos (para altas y para filtrar el catálogo)
+    const grupos = [...new Set(data.map(r => r.grupo_catalogo))];
+    const etiquetaGrupo = g => {
+      const o = opciones.find(x => x.grupo === g);
+      return o && (o.miembros.length > 1 || o.valor !== g) ? `${g} (${o.etiqueta})` : g;
+    };
+    $('alta-cliente').innerHTML = '<option value="">Selecciona...</option>' +
+      grupos.map(g => `<option value="${esc(g)}">${esc(etiquetaGrupo(g))}</option>`).join('');
+    $('filtro-cliente').innerHTML = '<option value="">Cliente: Todos</option>' +
+      grupos.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('');
+    $('chips').innerHTML = opciones.map(o => `<button class="chip" data-cliente="${esc(o.valor)}">${esc(o.etiqueta)}</button>`).join('');
+  } catch (e) {
+    $('chips').innerHTML = '<p class="empty">No se pudo cargar la lista de clientes.</p>';
+    selectores.forEach(id => { $(id).innerHTML = '<option value="">No se pudo cargar</option>'; });
+    aviso('No pude cargar la lista de clientes: ' + e.message + '. ¿Ya corriste el script 03 en Supabase?', 'error');
+  }
+}
+
+function alCambiarCliente() {
+  const nuevo = $('h-cliente').value;
+  if (app.resultados.length && nuevo !== app.clienteDeCorrida) {
+    // Los resultados se calcularon con los códigos de otro cliente: no deben quedar disponibles.
+    app.resultados = []; app.clienteDeCorrida = '';
+    $('h-btn-descargar').disabled = true; $('h-msg-integridad').textContent = '';
+    $('h-cliente-resultado').textContent = ''; $('h-progreso').classList.remove('activo');
+    $('h-progreso-texto').textContent = ''; $('h-barra').style.width = '0%';
+    limpiarAvisos(); actualizarDuplicados();
+    aviso('Cambiaste de cliente: los resultados anteriores se descartaron. Vuelve a homologar.', 'info');
+    actualizarContadores(); renderTabla();
+  }
+  app.cliente = nuevo;
+  $('h-cliente-info').textContent = nuevo
+    ? `Usará solo los códigos del grupo ${app.grupos[nuevo]}${app.grupos[nuevo] === 'GENERAL' ? ' (compartido por Banrural, Luz y Fuerza e INDEP)' : ' (exclusivos de este cliente)'}.`
+    : '';
+  actualizarBoton();
+}
+
+// ---------- Eventos ----------
+const zona = $('h-zona');
+zona.addEventListener('click', () => { if (!app.corriendo) $('h-input-archivo').click(); });
+zona.addEventListener('dragover', e => { e.preventDefault(); zona.classList.add('arrastrando'); });
+zona.addEventListener('dragleave', () => zona.classList.remove('arrastrando'));
+zona.addEventListener('drop', e => {
+  e.preventDefault(); zona.classList.remove('arrastrando');
+  if (!app.corriendo && e.dataTransfer.files.length) cargarArchivo(e.dataTransfer.files[0]);
+});
+$('h-input-archivo').addEventListener('change', e => { if (e.target.files.length) cargarArchivo(e.target.files[0]); });
+$('h-btn-homologar').addEventListener('click', homologar);
+$('h-cliente').addEventListener('change', alCambiarCliente);
+$('h-tbody').addEventListener('click', e => { const b = e.target.closest('[data-confirmar]'); if (b) confirmarFila(Number(b.dataset.confirmar)); });
+$('h-btn-detener').addEventListener('click', () => { app.detener = true; $('h-btn-detener').disabled = true; $('h-progreso-texto').textContent = 'Deteniendo al terminar el renglón actual…'; });
+$('h-btn-descargar').addEventListener('click', descargar);
+$('h-btn-probar-ia').addEventListener('click', probarIA);
+$('h-btn-llave-ia').addEventListener('click', alternarFormularioLlave);
+$('h-ia-guardar').addEventListener('click', guardarLlave);
+$('h-ia-usar-modelo').addEventListener('click', usarModelo);
+pintarEstadoIA('', 'IA sin probar', textoLlave());
+
+// ---- Confianza mínima para verde (se recuerda en este navegador) ----
+const CLAVE_UMBRAL = 'homologador-umbral';
+function umbralActual() {
+  let u = parseInt($('h-umbral').value, 10);
+  if (!Number.isFinite(u)) u = 80;
+  u = Math.min(100, Math.max(50, u));
+  $('h-umbral').value = u;
+  return u;
+}
+try { const g = localStorage.getItem(CLAVE_UMBRAL); if (g) $('h-umbral').value = g; } catch (e) { /* sin almacenamiento */ }
+$('h-umbral').addEventListener('change', () => { const u = umbralActual(); try { localStorage.setItem(CLAVE_UMBRAL, String(u)); } catch (e) { /* sin almacenamiento */ } });
+
+// ---- Motor 2B · diccionario y criterio clínico ----
+const CLAVE_DIC_ABBR = 'homologador-dic-abbr', CLAVE_DIC_SIN = 'homologador-dic-sin', CLAVE_MOTOR2B = 'homologador-motor2b';
+function leerLocal(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function guardarLocal(k, v) { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* sin almacenamiento */ } }
+function textosDiccionario() {
+  return { abbr: leerLocal(CLAVE_DIC_ABBR) ?? (HOMO.DEFAULT_ABBR + '\n' + HOMO.EXTRA_ABBR), sin: leerLocal(CLAVE_DIC_SIN) ?? HOMO.DEFAULT_SYN };
+}
+let ctxClinico = null;
+const cacheClinico = new Map();
+function reconstruirClinico() {
+  const d = textosDiccionario();
+  ctxClinico = HOMO.buildCtx(d.abbr, d.sin);
+  cacheClinico.clear();
+}
+function analizarClinico(t) {
+  const k = String(t ?? '');
+  let a = cacheClinico.get(k);
+  if (!a) { a = HOMO.analyze(k, ctxClinico); cacheClinico.set(k, a); }
+  return a;
+}
+const clinico = {
+  expandir(t) { const a = analizarClinico(t); return (a.appliedA.length || a.appliedS.length) ? a.str : null; },   // null = el diccionario no cambió nada
+  normal(t) { return analizarClinico(t).str; },
+  evaluar(t, d) { const c = HOMO.clinical(analizarClinico(t), analizarClinico(d)); return { hard: c.hard, soft: c.soft }; },
+};
+function motor2bActivo() { return $('h-motor2b').checked; }
+function pintarDiccionario() {
+  const d = textosDiccionario();
+  $('h-dic-cuenta').textContent = `(${HOMO.parseDict(d.abbr).length} abreviaturas, ${HOMO.parseDict(d.sin).length} sinónimos)`;
+}
+reconstruirClinico();
+{ const d = textosDiccionario(); $('h-dic-abbr').value = d.abbr; $('h-dic-sin').value = d.sin; }
+pintarDiccionario();
+try { const g = leerLocal(CLAVE_MOTOR2B); if (g !== null) $('h-motor2b').checked = g === '1'; } catch (e) { /* sin almacenamiento */ }
+$('h-motor2b').addEventListener('change', () => guardarLocal(CLAVE_MOTOR2B, $('h-motor2b').checked ? '1' : '0'));
+const guardarDiccionario = () => {
+  guardarLocal(CLAVE_DIC_ABBR, $('h-dic-abbr').value); guardarLocal(CLAVE_DIC_SIN, $('h-dic-sin').value);
+  reconstruirClinico(); pintarDiccionario();
+};
+$('h-dic-abbr').addEventListener('change', guardarDiccionario);
+$('h-dic-sin').addEventListener('change', guardarDiccionario);
+$('h-dic-restaurar').addEventListener('click', () => {
+  guardarLocal(CLAVE_DIC_ABBR, null); guardarLocal(CLAVE_DIC_SIN, null);
+  const d = textosDiccionario(); $('h-dic-abbr').value = d.abbr; $('h-dic-sin').value = d.sin;
+  reconstruirClinico(); pintarDiccionario();
+});
+
+// ---- Evitar códigos repetidos (se recuerda en este navegador) ----
+const CLAVE_EVITAR = 'homologador-evitar-repetidos';
+try { const g = localStorage.getItem(CLAVE_EVITAR); if (g !== null) $('h-evitar-repetidos').checked = g === '1'; } catch (e) { /* sin almacenamiento */ }
+$('h-evitar-repetidos').addEventListener('change', () => {
+  try { localStorage.setItem(CLAVE_EVITAR, $('h-evitar-repetidos').checked ? '1' : '0'); } catch (e) { /* sin almacenamiento */ }
+  if (app.resultados.length && !app.corriendo) aplicarRepetidos();      // se aplica al instante sobre lo ya calculado
+});
+
+// ---- Renglones a la vez (se recuerda en este navegador) ----
+const CLAVE_CONCURRENCIA = 'homologador-concurrencia';
+function concurrenciaActual() {
+  let n = parseInt($('h-concurrencia').value, 10);
+  if (!Number.isFinite(n)) n = 4;
+  n = Math.min(8, Math.max(1, n));
+  $('h-concurrencia').value = n;
+  return n;
+}
+try { const g = localStorage.getItem(CLAVE_CONCURRENCIA); if (g) $('h-concurrencia').value = g; } catch (e) { /* sin almacenamiento */ }
+$('h-concurrencia').addEventListener('change', () => { const n = concurrenciaActual(); try { localStorage.setItem(CLAVE_CONCURRENCIA, String(n)); } catch (e) { /* sin almacenamiento */ } });
+document.querySelectorAll('#view-homologar .tabs button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('#view-homologar .tabs button').forEach(x => x.classList.remove('activo'));
+  b.classList.add('activo');
+  app.filtro = b.dataset.filtro;
+  renderTabla();
+}));
+
+actualizarContadores();
+renderTabla();
+cargarClientes();
+
+// ============ embeddings-admin.js ============
+
+
+const LOTE = 8; // cuántas filas se procesan por vuelta (subido de 3 a 8, ya confirmado que a 3 no truena)
+
+const btn = document.getElementById('btn-generar-embeddings');
+const estadoEl = document.getElementById('estado-embeddings');
+
+async function pedirEmbeddings(textos) {
+  const resp = await fetch(EMBEDDING_FUNCTION_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${EMBEDDING_FUNCTION_KEY}`,
+    },
+    body: JSON.stringify({ textos }),
+  });
+  if (!resp.ok) {
+    const texto = await resp.text();
+    throw new Error(`Edge Function respondió ${resp.status}: ${texto}`);
+  }
+  const data = await resp.json();
+  return data.embeddings;
+}
+
+window.generarEmbeddingsFaltantes = async function () {
+  if (CATALOGO_SOLO_LECTURA) return bloqueoSoloLectura();
+  btn.disabled = true;
+  let totalHechos = 0;
+
+  try {
+    while (true) {
+      const { data: filas, error: errSelect } = await supabase
+        .from(TABLA_CATALOGO)
+        .select('cpt, descripcion')
+        .is('embedding', null)
+        .not('descripcion', 'is', null)
+        .limit(LOTE);
+
+      if (errSelect) throw errSelect;
+      if (!filas || filas.length === 0) break;
+
+      const textos = filas.map(f => f.descripcion);
+      const embeddings = await pedirEmbeddings(textos);
+
+      for (let i = 0; i < filas.length; i++) {
+        const { error: errUpdate } = await supabase
+          .from(TABLA_CATALOGO)
+          .update({ embedding: embeddings[i] })
+          .eq('cpt', filas[i].cpt)
+          .eq('descripcion', filas[i].descripcion);
+        if (errUpdate) throw errUpdate;
+      }
+
+      totalHechos += filas.length;
+      estadoEl.textContent = `Generados ${totalHechos} embeddings hasta ahora...`;
+    }
+
+    estadoEl.textContent = totalHechos > 0
+      ? `Listo: ${totalHechos} embeddings generados. El Motor 3 ya puede usarse.`
+      : 'No había filas pendientes — el catálogo ya tiene todos sus embeddings.';
+  } catch (err) {
+    estadoEl.textContent = 'Error: ' + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+
+// ============ consultas-rapidas (búsqueda por ID y por descripción) ============
+function debounce(fn, espera) {
+  let temporizador;
+  return (...args) => {
+    clearTimeout(temporizador);
+    temporizador = setTimeout(() => fn(...args), espera);
+  };
+}
+
+// --- Cliente de las consultas: solo se muestran los códigos de su grupo ---
+const qCliente = document.getElementById('q-cliente');
+function grupoDeConsulta() { return app.grupos[qCliente.value] || ''; }
+qCliente.addEventListener('change', () => {
+  document.getElementById('q-cliente-info').textContent = qCliente.value
+    ? `Mostrará solo los códigos del grupo ${grupoDeConsulta()}.` : '';
+  document.getElementById('q-id-input').value = '';
+  document.getElementById('q-id-resultados').innerHTML = '';
+  document.getElementById('q-desc-input').value = '';
+  document.getElementById('q-desc-lista').classList.remove('activa');
+  document.getElementById('q-desc-tabla-wrap').style.display = 'none';
+});
+
+// --- Buscar por ID (CPT) ---
+const qIdInput = document.getElementById('q-id-input');
+const qIdResultados = document.getElementById('q-id-resultados');
+
+async function buscarPorId(valor) {
+  if (!valor.trim()) { qIdResultados.innerHTML = ''; return; }
+  const grupoQ = grupoDeConsulta();
+  if (!grupoQ) { qIdResultados.innerHTML = '<div class="autocomplete-vacio">Elige primero un cliente.</div>'; return; }
+
+  const { data, error } = await supabase
+    .from('catalogo')
+    .select('cpt, descripcion, estatus, tipo_de_servicio, grupo_servicio')
+    .ilike('cpt', `%${valor.trim()}%`)
+    .eq('cliente', grupoQ)
+    .limit(10);
+
+  if (error) {
+    qIdResultados.innerHTML = `<div class="autocomplete-vacio">Error: ${escapeHtml(error.message)}</div>`;
+    return;
+  }
+  if (!data || data.length === 0) {
+    qIdResultados.innerHTML = '<div class="autocomplete-vacio">Sin coincidencias para ese ID.</div>';
+    return;
+  }
+  qIdResultados.innerHTML = data.map(r => `
+    <div class="q-id-fila">
+      <div>
+        <span class="code">${escapeHtml(r.cpt)}</span><br>
+        ${escapeHtml(r.descripcion)}
+        <div class="meta">${escapeHtml(r.tipo_de_servicio ?? '')} · ${escapeHtml(r.grupo_servicio ?? '')} · ${escapeHtml(r.estatus ?? '')}</div>
+      </div>
+    </div>
+  `).join('');
+}
+qIdInput.addEventListener('input', debounce(e => buscarPorId(e.target.value), 250));
+
+// --- Buscar por descripción, estilo Google (autocompletado en vivo) ---
+const qDescInput = document.getElementById('q-desc-input');
+const qDescLista = document.getElementById('q-desc-lista');
+const qDescTablaWrap = document.getElementById('q-desc-tabla-wrap');
+const qDescTablaBody = document.getElementById('q-desc-tabla-body');
+let ultimosResultadosDesc = [];
+
+async function buscarPorDescripcion(valor) {
+  if (!valor.trim()) { qDescLista.classList.remove('activa'); return; }
+  if (!grupoDeConsulta()) {
+    qDescLista.innerHTML = '<div class="autocomplete-vacio">Elige primero un cliente.</div>';
+    qDescLista.classList.add('activa');
+    return;
+  }
+
+  const { data, error } = await supabase.rpc('buscar_similar_cliente', { termino: valor.trim(), p_cliente: qCliente.value, limite: 8 });
+
+  if (error) {
+    qDescLista.innerHTML = `<div class="autocomplete-vacio">Error: ${escapeHtml(error.message)}</div>`;
+    qDescLista.classList.add('activa');
+    return;
+  }
+  if (!data || data.length === 0) {
+    qDescLista.innerHTML = '<div class="autocomplete-vacio">Sin coincidencias.</div>';
+    qDescLista.classList.add('activa');
+    return;
+  }
+
+  ultimosResultadosDesc = data;
+  qDescLista.innerHTML = data.map(r => `
+    <div class="autocomplete-item" data-cpt="${escapeHtml(r.cpt)}">
+      <div class="nombre">${escapeHtml(r.descripcion)}</div>
+      <div class="meta"><span class="code">${escapeHtml(r.cpt)}</span> · ${escapeHtml(r.tipo_de_servicio ?? '')} · score ${Math.round(Number(r.score) * 100)}</div>
+    </div>
+  `).join('');
+  qDescLista.classList.add('activa');
+}
+
+qDescInput.addEventListener('input', debounce(e => buscarPorDescripcion(e.target.value), 300));
+
+// Clic en un resultado: lo despliega como tabla (CPT, Descripción, Tipo de servicio).
+qDescLista.addEventListener('click', e => {
+  const item = e.target.closest('.autocomplete-item');
+  if (!item) return;
+  const cpt = item.dataset.cpt;
+  const elegido = ultimosResultadosDesc.find(r => r.cpt === cpt);
+  if (!elegido) return;
+
+  qDescInput.value = elegido.descripcion;
+  qDescLista.classList.remove('activa');
+
+  qDescTablaBody.innerHTML = `
+    <tr>
+      <td class="code">${escapeHtml(elegido.cpt)}</td>
+      <td>${escapeHtml(elegido.descripcion)}</td>
+      <td>${escapeHtml(elegido.tipo_de_servicio ?? '')}</td>
+    </tr>
+  `;
+  qDescTablaWrap.style.display = 'block';
+});
+
+// Cierra la lista si se hace clic fuera del buscador.
+document.addEventListener('click', e => {
+  if (!e.target.closest('.autocomplete-wrap')) qDescLista.classList.remove('activa');
+});
+
+// Carga inicial del catálogo al abrir la página.
+cargarCatalogo();
+
+</script>
+
+</body>
+</html>
