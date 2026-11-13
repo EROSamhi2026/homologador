@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Homologador CALLMED V 0.15</title>
+<title>Homologador CALLMED V 0.16</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -296,7 +296,7 @@ html.solo-lectura .btn-baja, html.solo-lectura #btn-nueva-alta, html.solo-lectur
         <button class="nav-item" data-go="consultas" data-nav="consultas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><span class="lbl">Consultas rápidas</span></button>
       </nav>
       <div class="top-actions">
-        <span class="ver">V 0.15</span>
+        <span class="ver">V 0.16</span>
         <button class="icon-btn theme-toggle" type="button"></button>
       </div>
     </div>
@@ -2234,7 +2234,13 @@ function explicarErrorIA(e) {
     case 'llave': return `Groq no aceptó la llave (${det}). Revisa que esté bien copiada y que no la hayas borrado en console.groq.com → API Keys; si hace falta, crea una nueva y pégala en "Configurar llave".`;
     case 'modelo': return `El modelo "${modeloGroq()}" no está disponible en Groq (${det}). Pulsa "Probar conexión con la IA" para ver qué modelos tiene tu cuenta.`;
     case 'limite': return `Se alcanzó el límite de solicitudes de Groq (${det}). Espera uno o dos minutos y vuelve a intentar, o corre sin IA.`;
-    case 'red': return `No se pudo conectar con Groq (${det}). Revisa tu internet y si un antivirus o una extensión del navegador está bloqueando la conexión.`;
+    case 'red': {
+      if (modoIA() === 'servidor') {
+        const donde = location.origin && location.origin !== 'null' ? location.origin : '(la dirección de esta página)';
+        return `No se pudo contactar la función de IA del servidor (${det}). Casi siempre es una de tres cosas: (1) la función groq-proxy no está desplegada en Supabase: abre ${urlProxyIA()} en una pestaña y, si dice NOT_FOUND, falta desplegarla; (2) esta dirección no está autorizada: agrega ${donde} a ALLOWED_ORIGINS en Supabase → Edge Functions → Secrets; (3) la función tiene "Verify JWT" encendido. Si no es ninguna de esas, revisa tu internet o una extensión del navegador que bloquee la conexión.`;
+      }
+      return `No se pudo conectar con Groq (${det}). Revisa tu internet y si un antivirus o una extensión del navegador está bloqueando la conexión.`;
+    }
     case 'servidor': return `Groq tuvo un problema de su lado (${det}). Intenta de nuevo en unos minutos.`;
     case 'formato': return `Groq rechazó el formato de la petición (${det}).`;
     default: return `Groq respondió: ${det}`;
@@ -2301,6 +2307,7 @@ async function llamarGroq(prompt) {
         await dormir(Math.min(e.esperarMs || IA_CONFIG.esperaBaseMs * 2 ** intento, 60000));
         continue;
       }
+      if (e.tipo === 'red' && modoIA() === 'servidor' && intento >= 1) throw e;     // la función del servidor no se cae a ratos: si no responde, es configuración
       if (e.tipo === 'red' || e.tipo === 'servidor') { await dormir(Math.min(IA_CONFIG.esperaBaseMs * 2 ** intento, 30000)); continue; }
       throw e;                                                                    // llave, modelo u otro: reintentar no sirve
     }
